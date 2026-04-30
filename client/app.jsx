@@ -282,8 +282,8 @@ function App() {
     return <JobLandingScreen onLoad={id => { setError(null); setData(null); setJobId(id); }} />;
   }
 
-  // ── Loading ──
-  if (loading && !data) {
+  // ── Loading (also covers the one-tick gap before useEffect sets loading=true) ──
+  if (loading || !data) {
     return (
       <div style={{
         height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
