@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CACHE_DIR = path.join(__dirname, 'cache');
+const CACHE_DIR = path.join(__dirname, '..', 'cache');
 
 function loadJson(filename) {
   const fp = path.join(CACHE_DIR, filename);
@@ -82,5 +82,50 @@ module.exports = {
 
   getPoDetails(projectId) {
     return loadJson(`po_${projectId}.json`) || [];
+  },
+
+  getProjectCosting(projectId) {
+    return {
+      JobID: projectId,
+      Description: 'Demo Project',
+      CustomerCity: 'Demo City',
+      EstEngHrs: 120,
+      ActEngHrs: 115,
+      EstMfgHrs: 400,
+      ActMfgHrs: 380,
+      EstEngLabor: 12000,
+      ActEngLabor: 11500,
+      EstMfgLabor: 24000,
+      ActMfgLabor: 22800,
+      EstMaterials: 85000,
+      ActMaterials: 82000,
+      TotalEstimate: 121000,
+      TotalActualCost: 116300,
+      SalesPrice: 150000,
+      BudgetMargin: 19.3,
+      ActualMargin: 22.4,
+    };
+  },
+
+  getSpecCosting(projectId) {
+    return [
+      {
+        JobID: projectId,
+        SectionID: 10,
+        SectionName: 'Mechanical Build',
+        EngHours: 80,
+        MfgHours: 300,
+        TotalHours: 380,
+        EngLabor: 8000,
+        MfgLabor: 18000,
+        TotalLabor: 26000,
+        PurchasedMaterials: 60000,
+        InventoryPulls: 5000,
+        ExtraCosts: 0,
+        TotalMaterials: 65000,
+        TotalCost: 91000,
+        Margin: 25.0,
+      },
+    ];
   },
 };

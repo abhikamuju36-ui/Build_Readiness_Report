@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const eto = require('../eto');
-const demo = require('../demoData');
+const eto = require('../services/eto');
+const demo = require('../services/demoData');
 
 function db() { return demo.isDemoMode() ? demo : eto; }
 

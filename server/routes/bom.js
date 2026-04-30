@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const eto = require('../eto');
-const demo = require('../demoData');
-const { buildTree, buildNestedTree } = require('../bomTree');
+const eto = require('../services/eto');
+const demo = require('../services/demoData');
+const { buildTree, buildNestedTree } = require('../lib/bomTree');
 
 function db() { return demo.isDemoMode() ? demo : eto; }
 

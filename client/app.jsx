@@ -1,0 +1,263 @@
+// App shell — top bar, left rail sidebar, and main content routing
+const { useState, useEffect } = React;
+
+// Cache versioning — bump this whenever the mapped data shape changes
+const CACHE_VERSION = 'v8';
+(function purgeStaleCaches() {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('sdc_cache_') && !key.endsWith('_' + CACHE_VERSION)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch(e) {}
+})();
+
+function App() {
+  const [jobId, setJobId] = useState(() => localStorage.getItem('sdc_job_id') || '1129');
+  const [tab, setTab] = useState(() => localStorage.getItem('sdc_active_tab') || 'readiness');
+  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('sdc_status_filter') || 'all');
+  
+  const [data, setData] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`sdc_cache_${jobId}_${CACHE_VERSION}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch(e) { return null; }
+  });
+  
+  const [loading, setLoading] = useState(!data);
+  const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => { localStorage.setItem('sdc_job_id', jobId); }, [jobId]);
+  useEffect(() => { localStorage.setItem('sdc_active_tab', tab); }, [tab]);
+  useEffect(() => { localStorage.setItem('sdc_status_filter', statusFilter); }, [statusFilter]);
+
+  useEffect(() => {
+    if (!data) setLoading(true);
+    setError(null);
+    Promise.all([
+      fetch(`/api/readiness/${jobId}`).then(res => {
+        if (!res.ok) throw new Error('Project not found');
+        return res.json();
+      }),
+      fetch(`/api/emails/${jobId}`).then(res => res.ok ? res.json() : { emails: [] })
+    ])
+      .then(([raw, rawEmails]) => {
+        const mapped = {
+          job: {
+            id: raw.project.ProjectID,
+            name: raw.project.ProjectName,
+            buildStart: raw.buildDates?.buildStart || '2026-06-01',
+            shipDate: raw.buildDates?.buildComplete || '2026-08-01',
+            kpis: { assemblies: 0, ready: 0, close: 0, blocked: 0, noPO: 0 },
+            actMat: raw.projectCosting?.ActMaterials || 0,
+            estMat: raw.projectCosting?.EstMaterials || 0,
+            actLabor: (raw.projectCosting?.ActEngLabor || 0) + (raw.projectCosting?.ActMfgLabor || 0),
+            estLabor: (raw.projectCosting?.EstEngLabor || 0) + (raw.projectCosting?.EstMfgLabor || 0),
+            marginActual: (raw.projectCosting?.ActualMargin || 0) / 100,
+            marginTarget: (raw.projectCosting?.BudgetMargin || 0) / 100,
+          },
+          readiness: raw.specs.map(s => ({
+            spec: s.specId,
+            title: s.specName,
+            lines: s.totalParts,
+            assemblies: (s.machines || []).map(machine => ({
+              ...machine,
+              code: machine.pn,
+              name: machine.pn,
+              desc: machine.desc,
+              pct: machine.stats?.pct || 0,
+              ready: machine.stats?.received || 0,
+              total: machine.stats?.total || 0,
+              noPo: machine.stats?.noPO || 0,
+              status: (machine.stats?.pct >= 85) ? 'ready' : (machine.stats?.pct >= 60) ? 'close' : 'blocked',
+              children: [],
+            }))
+          })),
+          costing: (raw.specCosting || []).map(s => ({
+            spec: String(s.SectionID),
+            name: s.SectionName,
+            laborHrs: (s.EngHours || 0) + (s.MfgHours || 0),
+            labor: (s.EngLabor || 0) + (s.MfgLabor || 0),
+            materials: s.TotalMaterials || 0,
+            total: s.TotalCost || 0,
+            margin: s.Margin || 0,
+          })),
+          poActions: raw.poActions,
+          emails: (rawEmails.emails || []).map(e => ({
+            vendor: e.supplier,
+            overdue: e.isOverdue,
+            pos: e.poCount,
+            contacts: [e.email].filter(Boolean),
+            subject: e.subject,
+            body: e.body
+          })),
+          nopo: raw.specs.flatMap(s => (s.noPoParts || []).map(p => ({
+            ...p,
+            parent: (p.parentPN ? `${p.parentPN} ` : '') + (p.parentDesc || p.parentPN || 'Loose Parts'),
+          })))
+        };
+
+        mapped.readiness.forEach(s => {
+          s.assemblies.forEach(a => {
+            mapped.job.kpis.assemblies++;
+            if (a.status === 'ready') mapped.job.kpis.ready++;
+            else if (a.status === 'close') mapped.job.kpis.close++;
+            else mapped.job.kpis.blocked++;
+            mapped.job.kpis.noPO += a.noPo;
+          });
+        });
+
+        setData(mapped);
+        localStorage.setItem(`sdc_cache_${jobId}_${CACHE_VERSION}`, JSON.stringify(mapped));
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [jobId]);
+
+  if (error) {
+    return (
+      <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ color: 'var(--threat)', fontSize: 40, marginBottom: 16 }}>⚠️</div>
+          <div className="eyebrow" style={{ color: 'var(--threat)' }}>Application Error</div>
+          <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px' }}>{error}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload Dashboard</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <div style={{ 
+        height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+        background: 'linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 100%)', color: 'var(--fg-3)' 
+      }}>
+        <div style={{ position: 'relative', width: 80, height: 80, marginBottom: 32 }}>
+          <div className="spinner" style={{ width: '100%', height: '100%', border: '3px solid var(--bg-3)', borderTopColor: 'var(--sdc-blue)', borderRadius: '50%' }} />
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+            <img src="/sdc_logo_small.png" style={{ width: 24, opacity: 0.8 }} onError={e => e.target.style.display = 'none'} />
+          </div>
+        </div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', fontWeight: 600, color: 'var(--fg-0)', opacity: 0.9 }}>SYNCHRONIZING SDC SYSTEMS</div>
+        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 8, fontWeight: 400 }}>Retrieving live assembly data for Job #{jobId}...</div>
+      </div>
+    );
+  }
+
+  const navItems = [
+    { id: 'readiness', label: 'Build Readiness', icon: <window.IconLayers size={14}/> },
+    { id: 'po',        label: 'PO Tracker',       icon: <window.IconTruck size={14}/>, count: data.poActions?.critical?.length || 0, countAccent: 'threat' },
+    { id: 'cost',      label: 'Project Costs',    icon: <window.IconDollar size={14}/> },
+    { id: 'emails',    label: 'Vendor Emails',    icon: <window.IconMail size={14}/>, count: data.emails?.length || 0, countAccent: 'pending' },
+  ];
+
+  return (
+    <div className="app">
+      <window.TopBar jobId={jobId} setJobId={setJobId} job={data.job} setActiveTab={setTab} loading={loading}/>
+      
+      <aside className="rail">
+        <div className="rail-section">
+          <div className="rail-h">Project</div>
+          {navItems.map(item => (
+            <button key={item.id} className={`rail-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="ico">{item.icon}</span>
+                {item.label}
+              </span>
+              {item.count > 0 && (
+                <span className={`badge badge-${item.countAccent === 'threat' ? 'threat' : 'pending'}`} style={{ height: 16, fontSize: 9.5 }}>
+                  {item.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="rail-divider"/>
+
+        <div className="rail-section">
+          <div className="rail-h">Quick Filters</div>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('ready'); }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ico"><span className="dot-led ready" style={{margin:0}}/></span>
+              Ready to Build
+            </span>
+            <span className="count">{data.job.kpis.ready}</span>
+          </button>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('close'); }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ico"><span className="dot-led pending" style={{margin:0}}/></span>
+              Close (80–99%)
+            </span>
+            <span className="count">{data.job.kpis.close}</span>
+          </button>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('blocked'); }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ico"><span className="dot-led threat" style={{margin:0}}/></span>
+              Blocked / Risks
+            </span>
+            <span className="count">{data.job.kpis.blocked}</span>
+          </button>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('all'); setQuery('no po'); }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ico"><window.IconCircleX size={12}/></span>
+              Parts — No PO
+            </span>
+            <span className="count">{data.job.kpis.noPO}</span>
+          </button>
+        </div>
+
+        <div className="rail-divider"/>
+
+        <div className="rail-section">
+          <div className="rail-h">Specs</div>
+          {data.readiness.map(spec => (
+            <button key={spec.spec} className="rail-item" onClick={() => { setTab('readiness'); setQuery(`Spec ${spec.spec}`); }}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="ico"><window.IconBox size={12}/></span>
+                Spec {spec.spec} — Mech.
+              </span>
+              <span className="count">{spec.lines}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <div className="rail-section">
+          <div className="rail-h">Recent Jobs</div>
+          {[
+            { id: '1127', name: 'Schneider - Cartoner' },
+            { id: '1116', name: 'Honeywell - Indexer' },
+            { id: '1108', name: 'Tetra - Filler Mk II' },
+          ].map(job => (
+            <button key={job.id} className="rail-item" onClick={() => setJobId(job.id)}>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 600 }}>{job.id}</span>
+                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{job.name}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <main className="main">
+        <div className="main-inner">
+          {tab === 'readiness' && <window.ReadinessTab data={data} query={query} setQuery={setQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} jobId={jobId}/>}
+          {tab === 'po' && <window.PoTab data={data}/>}
+          {tab === 'cost' && <window.CostTab data={data}/>}
+          {tab === 'emails' && <window.EmailsTab data={data} job={data.job}/>}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

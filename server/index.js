@@ -7,7 +7,7 @@ const readinessRoutes = require('./routes/readiness');
 const emailRoutes = require('./routes/emails');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Serve static frontend
 app.use(express.static(path.join(__dirname, '..', 'client')));

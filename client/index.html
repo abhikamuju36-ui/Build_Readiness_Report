@@ -1,56 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SDC Build Readiness Report</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"/>
+<title>SDC Build Readiness Report</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="styles.css?v=8"/>
 </head>
 <body>
-  <!-- Header -->
-  <header id="app-header">
-    <div class="header-left">
-      <h1>SDC Build Readiness</h1>
-    </div>
-    <div class="header-center">
-      <form id="project-form">
-        <label for="project-input">Job #</label>
-        <input type="number" id="project-input" placeholder="e.g. 1083" min="1">
-        <button type="submit" id="load-btn">Load</button>
-      </form>
-    </div>
-    <div class="header-right" id="project-info"></div>
-  </header>
+<div id="root"></div>
 
-  <!-- Tabs -->
-  <nav id="tab-bar" class="hidden">
-    <button class="tab active" data-view="readiness">Build Readiness</button>
-    <button class="tab" data-view="bom-tree">Full BOM Tree</button>
-    <button class="tab" data-view="po-actions">PO Action List</button>
-    <button class="tab" data-view="emails">Draft Emails</button>
-  </nav>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="utils/derive.js"></script>
 
-  <!-- Main content -->
-  <main id="content">
-    <div id="welcome" class="center-message">
-      <h2>Enter a job number to get started</h2>
-      <p>The report pulls live data from Total ETO and shows what assemblies are ready to build.</p>
-    </div>
-    <div id="loading" class="center-message hidden">
-      <div class="spinner"></div>
-      <p>Loading project data...</p>
-    </div>
-    <div id="error-msg" class="center-message hidden"></div>
+<script type="text/babel" src="components/primitives.jsx?v=8"></script>
+<script type="text/babel" src="components/topbar.jsx?v=8"></script>
+<script type="text/babel" src="components/timeline.jsx?v=8"></script>
+<script type="text/babel" src="components/tabs/tab-readiness.jsx?v=8"></script>
+<script type="text/babel" src="components/tabs/tab-po.jsx?v=8"></script>
+<script type="text/babel" src="components/tabs/tab-cost.jsx?v=8"></script>
+<script type="text/babel" src="components/tabs/tab-emails.jsx?v=8"></script>
+<script type="text/babel" src="app.jsx?v=8"></script>
 
-    <!-- Views -->
-    <div id="view-readiness" class="view hidden"></div>
-    <div id="view-bom-tree" class="view hidden"></div>
-    <div id="view-po-actions" class="view hidden"></div>
-    <div id="view-emails" class="view hidden"></div>
-  </main>
-
-  <script src="app.js"></script>
 </body>
 </html>

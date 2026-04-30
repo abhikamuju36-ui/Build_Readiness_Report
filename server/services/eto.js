@@ -7,6 +7,8 @@ const config = {
   database: process.env.ETO_DATABASE,
   user: process.env.ETO_USER,
   password: process.env.ETO_PASSWORD,
+  domain: process.env.ETO_DOMAIN,
+  port: process.env.ETO_PORT ? parseInt(process.env.ETO_PORT) : 1433,
   options: {
     encrypt: false,
     trustServerCertificate: true,
@@ -135,11 +137,70 @@ async function getProjectInfo(projectId) {
   const result = await db.request()
     .input('projectId', sql.Int, projectId)
     .query(`
-      SELECT TOP 1 ProjectID, ProjectName, ProjectDescription
-      FROM tblProjects
+      SELECT TOP 1 ProjectID, PDescription AS ProjectName
+      FROM vwProjects
       WHERE ProjectID = @projectId
     `);
   return result.recordset[0] || null;
+}
+
+async function getProjectCosting(projectId) {
+  const db = await getPool();
+  const result = await db.request()
+    .input('projectId', sql.Int, projectId)
+    .query(`
+      SELECT
+        C.ProjectID AS [JobID],
+        C.PDescription AS [Description],
+        C.CompanyCity AS [CustomerCity],
+        C.EstEngHours AS [EstEngHrs],
+        C.ActEngHours AS [ActEngHrs],
+        C.EstMfgHours AS [EstMfgHrs],
+        C.ActMfgHours AS [ActMfgHrs],
+        C.EngEstimateExtended AS [EstEngLabor],
+        C.ActEngLabor AS [ActEngLabor],
+        C.MfgEstimateExtended AS [EstMfgLabor],
+        C.ActMfgLabor AS [ActMfgLabor],
+        C.EstTotalMaterials AS [EstMaterials],
+        C.ActTotalMaterials AS [ActMaterials],
+        C.ExtendedEstimate AS [TotalEstimate],
+        C.ActTotalCost AS [TotalActualCost],
+        C.SalesPrice AS [SalesPrice],
+        C.BudgetMargin AS [BudgetMargin],
+        C.ActualMargin AS [ActualMargin]
+      FROM vwProjectActualsVSEstimates C WITH(NOLOCK)
+      WHERE C.ProjectID = @projectId
+    `);
+  return result.recordset[0] || null;
+}
+
+async function getSpecCosting(projectId) {
+  const db = await getPool();
+  const result = await db.request()
+    .input('projectId', sql.Int, projectId)
+    .query(`
+      SELECT
+        C.ProjectID AS [JobID],
+        C.SpecID AS [SectionID],
+        S.SDescription AS [SectionName],
+        C.EngHours AS [EngHours],
+        C.MFGHours AS [MfgHours],
+        C.TotalHours AS [TotalHours],
+        C.EngLabor AS [EngLabor],
+        C.MFGLabor AS [MfgLabor],
+        C.TotalLabor AS [TotalLabor],
+        C.TotalPurchasedMaterials AS [PurchasedMaterials],
+        C.TotalInventoryPulls AS [InventoryPulls],
+        C.TotalExtraCosts AS [ExtraCosts],
+        C.TotalMaterials AS [TotalMaterials],
+        C.TotalCost AS [TotalCost],
+        C.Margin AS [Margin]
+      FROM vwCostingSummed_BySpecID C WITH(NOLOCK)
+      LEFT JOIN vwSpec S WITH(NOLOCK) ON S.ProjectID = C.ProjectID AND S.SpecID = C.SpecID
+      WHERE C.ProjectID = @projectId
+      ORDER BY C.TotalCost DESC
+    `);
+  return result.recordset;
 }
 
 module.exports = {
@@ -148,4 +209,6 @@ module.exports = {
   getBomRows,
   getPoDetails,
   getProjectInfo,
+  getProjectCosting,
+  getSpecCosting,
 };

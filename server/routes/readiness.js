@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const eto = require('../eto');
-const demo = require('../demoData');
-const { getBuildDates } = require('../smartsheet');
-const { buildTree, buildReadinessSummary, buildPoActionList, buildPoIndex, findNoPoParts } = require('../bomTree');
+const eto = require('../services/eto');
+const demo = require('../services/demoData');
+const { getBuildDates } = require('../services/smartsheet');
+const { buildTree, buildReadinessSummary, buildPoActionList, buildPoIndex, findNoPoParts } = require('../lib/bomTree');
 
 function db() { return demo.isDemoMode() ? demo : eto; }
 
@@ -13,11 +13,13 @@ router.get('/:projectId', async (req, res) => {
     const projectId = parseInt(req.params.projectId);
     const src = db();
 
-    const [project, specs, poRows, buildDates] = await Promise.all([
+    const [project, specs, poRows, buildDates, projectCosting, specCosting] = await Promise.all([
       src.getProjectInfo(projectId),
       src.getSpecs(projectId),
       src.getPoDetails(projectId),
       getBuildDates(projectId).catch(() => ({ buildStart: null, buildComplete: null })),
+      src.getProjectCosting(projectId).catch(() => null),
+      src.getSpecCosting(projectId).catch(() => []),
     ]);
 
     if (!specs || specs.length === 0) {
@@ -29,15 +31,14 @@ router.get('/:projectId', async (req, res) => {
     // Build PO index (ItemID → PO detail lines)
     const poIndex = buildPoIndex(poRows);
 
-    // Build readiness per spec
-    const specReports = [];
-    for (const spec of specs) {
+    // Build readiness per spec concurrently
+    const specReportsRaw = await Promise.all(specs.map(async (spec) => {
       const [topNode, bomRows] = await Promise.all([
         src.getTopNode(projectId, spec.SpecID),
         src.getBomRows(projectId, spec.SpecID),
       ]);
 
-      if (!topNode || bomRows.length === 0) continue;
+      if (!topNode || bomRows.length === 0) return null;
 
       const { assemblyIds, childrenMap } = buildTree(bomRows);
       const summary = buildReadinessSummary(
@@ -46,7 +47,7 @@ router.get('/:projectId', async (req, res) => {
       );
       const noPoParts = findNoPoParts(bomRows, assemblyIds);
 
-      specReports.push({
+      return {
         specId: spec.SpecID,
         specName: spec.SDescription,
         specQty: spec.SQuantity,
@@ -56,8 +57,10 @@ router.get('/:projectId', async (req, res) => {
         tree: summary.tree,
         noPoParts,
         totalParts: bomRows.length,
-      });
-    }
+      };
+    }));
+
+    const specReports = specReportsRaw.filter(Boolean);
 
     // PO action list
     const poActions = buildPoActionList(poRows);
@@ -67,6 +70,8 @@ router.get('/:projectId', async (req, res) => {
       specs: specReports,
       poActions,
       buildDates,
+      projectCosting,
+      specCosting,
       demoMode: demo.isDemoMode(),
       generatedAt: new Date().toISOString(),
     });

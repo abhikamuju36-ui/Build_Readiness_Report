@@ -9,17 +9,27 @@ async function smartsheetFetch(path) {
   const apiKey = process.env.SMARTSHEET_API_KEY;
   if (!apiKey) return null;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!res.ok) {
-    console.error(`Smartsheet API error: ${res.status} ${res.statusText}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      signal: controller.signal,
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) {
+      console.error(`Smartsheet API error: ${res.status} ${res.statusText}`);
+      return null;
+    }
+    return res.json();
+  } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 /**
