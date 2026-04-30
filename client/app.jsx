@@ -1,5 +1,5 @@
 // App shell — top bar, left rail sidebar, and main content routing
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 // Cache versioning — bump this whenever the mapped data shape changes
 const CACHE_VERSION = 'v8';
@@ -13,32 +13,188 @@ const CACHE_VERSION = 'v8';
   } catch(e) {}
 })();
 
+// ─── Recent Jobs helpers ────────────────────────────────────────────────────
+function getRecentJobs() {
+  try { return JSON.parse(localStorage.getItem('sdc_recent_jobs') || '[]'); }
+  catch(e) { return []; }
+}
+function saveRecentJob(id, name) {
+  try {
+    const list = getRecentJobs().filter(j => j.id !== id);
+    list.unshift({ id, name });
+    localStorage.setItem('sdc_recent_jobs', JSON.stringify(list.slice(0, 5)));
+  } catch(e) {}
+}
+
+// ─── Landing Screen ─────────────────────────────────────────────────────────
+function JobLandingScreen({ onLoad }) {
+  const [input, setInput] = useState('');
+  const [recentJobs, setRecentJobs] = useState(getRecentJobs);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSubmit = () => {
+    const id = input.trim();
+    if (!id) return;
+    onLoad(id);
+  };
+
+  return (
+    <div style={{
+      height: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(160deg, var(--bg) 0%, var(--bg-sunken) 100%)',
+    }}>
+      {/* Card */}
+      <div style={{
+        background: 'var(--bg-raised)', border: '1px solid var(--border)',
+        borderRadius: 16, boxShadow: 'var(--shadow-lg)',
+        padding: '48px 52px', width: 480, display: 'flex', flexDirection: 'column', gap: 32,
+      }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <img
+            src="assets/sdc-logo-blue.png"
+            style={{ height: 36 }}
+            onError={e => e.target.style.display = 'none'}
+          />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
+              SDC Command
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 4 }}>
+              Build Readiness · PO Tracker · Project Costs
+            </div>
+          </div>
+        </div>
+
+        {/* Input */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Job Number
+          </label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              placeholder="e.g. 1129"
+              style={{
+                flex: 1, height: 44, padding: '0 14px',
+                fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                background: 'var(--bg-sunken)', border: '1px solid var(--border)',
+                borderRadius: 8, color: 'var(--ink)', outline: 'none',
+                letterSpacing: '0.04em',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'var(--sdc-blue)';
+                e.target.style.boxShadow = '0 0 0 3px var(--sdc-blue-soft)';
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'var(--border)';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim()}
+              style={{
+                height: 44, padding: '0 22px',
+                background: input.trim() ? 'var(--sdc-blue)' : 'var(--bg-sunken)',
+                color: input.trim() ? 'white' : 'var(--ink-4)',
+                border: '1px solid ' + (input.trim() ? 'var(--sdc-blue)' : 'var(--border)'),
+                borderRadius: 8, fontSize: 14, fontWeight: 600,
+                cursor: input.trim() ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s',
+              }}
+            >
+              Load →
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+            Press <span style={{ fontFamily: 'var(--font-mono)', background: 'var(--bg-sunken)', padding: '1px 5px', borderRadius: 3, border: '1px solid var(--border)' }}>Enter</span> to load
+          </div>
+        </div>
+
+        {/* Recent Jobs */}
+        {recentJobs.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Recent Projects
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {recentJobs.map(job => (
+                <button
+                  key={job.id}
+                  onClick={() => onLoad(job.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', borderRadius: 8,
+                    background: 'var(--bg-sunken)', border: '1px solid var(--border)',
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'all 0.12s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-sunken)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--sdc-blue)' }}>#{job.id}</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{job.name || 'Project ' + job.id}</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Open →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24, fontSize: 11, color: 'var(--ink-4)' }}>
+        Live data from TotalETO · SDC Automation
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
-  const [jobId, setJobId] = useState(() => localStorage.getItem('sdc_job_id') || '1129');
+  const [jobId, setJobId] = useState(null);
   const [tab, setTab] = useState(() => localStorage.getItem('sdc_active_tab') || 'readiness');
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('sdc_status_filter') || 'all');
-  
-  const [data, setData] = useState(() => {
-    try {
-      const cached = localStorage.getItem(`sdc_cache_${jobId}_${CACHE_VERSION}`);
-      return cached ? JSON.parse(cached) : null;
-    } catch(e) { return null; }
-  });
-  
-  const [loading, setLoading] = useState(!data);
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
 
-  useEffect(() => { localStorage.setItem('sdc_job_id', jobId); }, [jobId]);
   useEffect(() => { localStorage.setItem('sdc_active_tab', tab); }, [tab]);
   useEffect(() => { localStorage.setItem('sdc_status_filter', statusFilter); }, [statusFilter]);
 
   useEffect(() => {
-    if (!data) setLoading(true);
+    if (!jobId) return;
+
+    // Try cache first
+    try {
+      const cached = localStorage.getItem(`sdc_cache_${jobId}_${CACHE_VERSION}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setData(parsed);
+        setLoading(false);
+        return;
+      }
+    } catch(e) {}
+
+    setLoading(true);
     setError(null);
+    setData(null);
+
     Promise.all([
       fetch(`/api/readiness/${jobId}`).then(res => {
-        if (!res.ok) throw new Error('Project not found');
+        if (!res.ok) throw new Error('Project not found — check the job number and try again.');
         return res.json();
       }),
       fetch(`/api/emails/${jobId}`).then(res => res.ok ? res.json() : { emails: [] })
@@ -110,6 +266,7 @@ function App() {
         });
 
         setData(mapped);
+        saveRecentJob(String(jobId), mapped.job.name);
         localStorage.setItem(`sdc_cache_${jobId}_${CACHE_VERSION}`, JSON.stringify(mapped));
         setLoading(false);
       })
@@ -120,37 +277,52 @@ function App() {
       });
   }, [jobId]);
 
+  // ── No job selected yet — show landing screen ──
+  if (!jobId) {
+    return <JobLandingScreen onLoad={id => { setError(null); setData(null); setJobId(id); }} />;
+  }
+
+  // ── Loading ──
+  if (loading && !data) {
+    return (
+      <div style={{
+        height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, var(--bg) 0%, var(--bg-sunken) 100%)', color: 'var(--ink-3)',
+      }}>
+        <div style={{ position: 'relative', width: 72, height: 72, marginBottom: 28 }}>
+          <div className="spinner" style={{ width: '100%', height: '100%', border: '3px solid var(--bg-sunken)', borderTopColor: 'var(--sdc-blue)', borderRadius: '50%' }} />
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+            <img src="assets/sdc-logo-blue.png" style={{ height: 22, opacity: 0.7 }} onError={e => e.target.style.display = 'none'} />
+          </div>
+        </div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.18em', fontWeight: 600, color: 'var(--ink)' }}>LOADING PROJECT</div>
+        <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 6 }}>Retrieving live data for Job #{jobId}…</div>
+      </div>
+    );
+  }
+
+  // ── Error ──
   if (error) {
     return (
       <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
-        <div style={{ textAlign: 'center', maxWidth: 400 }}>
-          <div style={{ color: 'var(--threat)', fontSize: 40, marginBottom: 16 }}>⚠️</div>
-          <div className="eyebrow" style={{ color: 'var(--threat)' }}>Application Error</div>
-          <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px' }}>{error}</p>
-          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload Dashboard</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && !data) {
-    return (
-      <div style={{ 
-        height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
-        background: 'linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 100%)', color: 'var(--fg-3)' 
-      }}>
-        <div style={{ position: 'relative', width: 80, height: 80, marginBottom: 32 }}>
-          <div className="spinner" style={{ width: '100%', height: '100%', border: '3px solid var(--bg-3)', borderTopColor: 'var(--sdc-blue)', borderRadius: '50%' }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-            <img src="/sdc_logo_small.png" style={{ width: 24, opacity: 0.8 }} onError={e => e.target.style.display = 'none'} />
+        <div style={{ textAlign: 'center', maxWidth: 420 }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
+          <div className="eyebrow" style={{ color: 'var(--threat)' }}>Could Not Load Job #{jobId}</div>
+          <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px', fontSize: 14 }}>{error}</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={() => { setError(null); setData(null); setLoading(true); setJobId(j => j); }}>
+              Retry
+            </button>
+            <button className="btn" onClick={() => { setJobId(null); setError(null); setData(null); }}>
+              ← Back to Search
+            </button>
           </div>
         </div>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', fontWeight: 600, color: 'var(--fg-0)', opacity: 0.9 }}>SYNCHRONIZING SDC SYSTEMS</div>
-        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 8, fontWeight: 400 }}>Retrieving live assembly data for Job #{jobId}...</div>
       </div>
     );
   }
 
+  // ── Dashboard ──
   const navItems = [
     { id: 'readiness', label: 'Build Readiness', icon: <window.IconLayers size={14}/> },
     { id: 'po',        label: 'PO Tracker',       icon: <window.IconTruck size={14}/>, count: data.poActions?.critical?.length || 0, countAccent: 'threat' },
@@ -160,8 +332,8 @@ function App() {
 
   return (
     <div className="app">
-      <window.TopBar jobId={jobId} setJobId={setJobId} job={data.job} setActiveTab={setTab} loading={loading}/>
-      
+      <window.TopBar jobId={jobId} setJobId={id => { setData(null); setJobId(id); }} job={data.job} setActiveTab={setTab} loading={loading}/>
+
       <aside className="rail">
         <div className="rail-section">
           <div className="rail-h">Project</div>
@@ -232,19 +404,25 @@ function App() {
         <div style={{ flex: 1 }} />
 
         <div className="rail-section">
-          <div className="rail-h">Recent Jobs</div>
-          {[
-            { id: '1127', name: 'Schneider - Cartoner' },
-            { id: '1116', name: 'Honeywell - Indexer' },
-            { id: '1108', name: 'Tetra - Filler Mk II' },
-          ].map(job => (
-            <button key={job.id} className="rail-item" onClick={() => setJobId(job.id)}>
+          <div className="rail-h">Recent Projects</div>
+          {getRecentJobs().map(job => (
+            <button key={job.id} className="rail-item" onClick={() => { setData(null); setJobId(job.id); }}>
               <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 600 }}>{job.id}</span>
-                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{job.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 600 }}>#{job.id}</span>
+                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{job.name || 'Project ' + job.id}</span>
               </span>
             </button>
           ))}
+          <button
+            className="rail-item"
+            onClick={() => { setJobId(null); setData(null); setError(null); }}
+            style={{ marginTop: 4, color: 'var(--sdc-blue)', fontWeight: 500 }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="ico"><window.IconSearch size={12}/></span>
+              Open Different Job…
+            </span>
+          </button>
         </div>
       </aside>
 
