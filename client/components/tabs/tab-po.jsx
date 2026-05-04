@@ -520,8 +520,9 @@ function PoTimeline({ poActions, query, job }) {
             <div key={i} style={{ 
               position: 'absolute', left: `${toPct(w)}%`, top: 0, bottom: 0, 
               width: `${(7 * 24 * 60 * 60 * 1000 / totalMs) * 100}%`,
-              borderLeft: '1px solid var(--border-subtle)', padding: '4px 8px',
-              fontSize: 9, color: 'var(--fg-3)', whiteSpace: 'nowrap'
+              borderLeft: '1px solid var(--border-subtle)', padding: '4px 6px',
+              fontSize: 9, color: 'var(--fg-3)', whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis', background: 'var(--bg-1)'
             }}>
               {w.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
             </div>
@@ -594,9 +595,15 @@ function PoTimeline({ poActions, query, job }) {
                    
                    {/* Label */}
                    <span className="mono" style={{ 
-                     position: 'absolute', left: `${left + width + 1}%`, 
-                     fontSize: 9, fontWeight: 700, color: isLate ? 'var(--threat-ink)' : 'var(--fg-3)',
-                     whiteSpace: 'nowrap'
+                     position: 'absolute', 
+                     left: left + width > 90 ? 'auto' : `${left + width + 1}%`,
+                     right: left + width > 90 ? `${100 - left + 1}%` : 'auto',
+                     fontSize: 9, fontWeight: 700, 
+                     color: isLate ? 'var(--threat-ink)' : 'var(--fg-3)',
+                     whiteSpace: 'nowrap',
+                     background: 'rgba(255,255,255,0.7)',
+                     padding: '1px 4px', borderRadius: 4,
+                     pointerEvents: 'none'
                    }}>
                      {entry.po.dueDate ? new Date(entry.po.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : ''}
                      {isLate && ` (${Math.abs(entry.worstDays)}d LATE)`}

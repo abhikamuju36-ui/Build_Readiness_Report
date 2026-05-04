@@ -279,7 +279,28 @@ function App() {
 
   // ── No job selected yet — show landing screen ──
   if (!jobId) {
-    return <JobLandingScreen onLoad={id => { setError(null); setData(null); setJobId(id); }} />;
+    return <JobLandingScreen onLoad={id => { setError(null); setData(null); setJobId(id); setTab('readiness'); }} />;
+  }
+
+  // ── Error ──
+  if (error) {
+    return (
+      <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+        <div style={{ textAlign: 'center', maxWidth: 420 }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
+          <div className="eyebrow" style={{ color: 'var(--threat)' }}>Could Not Load Job #{jobId}</div>
+          <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px', fontSize: 14 }}>{error}</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={() => { setError(null); setData(null); setLoading(true); /* trigger effect */ setJobId(String(jobId)); }}>
+              Retry
+            </button>
+            <button className="btn" onClick={() => { setJobId(null); setError(null); setData(null); }}>
+              ← Back to Search
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Loading (also covers the one-tick gap before useEffect sets loading=true) ──
@@ -297,27 +318,6 @@ function App() {
         </div>
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.18em', fontWeight: 600, color: 'var(--ink)' }}>LOADING PROJECT</div>
         <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 6 }}>Retrieving live data for Job #{jobId}…</div>
-      </div>
-    );
-  }
-
-  // ── Error ──
-  if (error) {
-    return (
-      <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
-        <div style={{ textAlign: 'center', maxWidth: 420 }}>
-          <div style={{ fontSize: 36, marginBottom: 16 }}>⚠️</div>
-          <div className="eyebrow" style={{ color: 'var(--threat)' }}>Could Not Load Job #{jobId}</div>
-          <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px', fontSize: 14 }}>{error}</p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => { setError(null); setData(null); setLoading(true); setJobId(j => j); }}>
-              Retry
-            </button>
-            <button className="btn" onClick={() => { setJobId(null); setError(null); setData(null); }}>
-              ← Back to Search
-            </button>
-          </div>
-        </div>
       </div>
     );
   }
@@ -356,21 +356,21 @@ function App() {
 
         <div className="rail-section">
           <div className="rail-h">Quick Filters</div>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('ready'); }}>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready'); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led ready" style={{margin:0}}/></span>
               Ready to Build
             </span>
             <span className="count">{data.job.kpis.ready}</span>
           </button>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('close'); }}>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'close' ? 'all' : 'close'); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led pending" style={{margin:0}}/></span>
               Close (80–99%)
             </span>
             <span className="count">{data.job.kpis.close}</span>
           </button>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('blocked'); }}>
+          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked'); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led threat" style={{margin:0}}/></span>
               Blocked / Risks
@@ -406,7 +406,7 @@ function App() {
         <div className="rail-section">
           <div className="rail-h">Recent Projects</div>
           {getRecentJobs().map(job => (
-            <button key={job.id} className="rail-item" onClick={() => { setData(null); setJobId(job.id); }}>
+            <button key={job.id} className="rail-item" onClick={() => { setData(null); setJobId(job.id); setTab('readiness'); }}>
               <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ fontSize: 11, color: 'var(--ink-4)', fontWeight: 600 }}>#{job.id}</span>
                 <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{job.name || 'Project ' + job.id}</span>

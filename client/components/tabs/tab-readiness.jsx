@@ -151,7 +151,6 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                   <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }}/>
                   {Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build
                 </span>
-                <button className="btn btn-sm btn-primary" onClick={handleExpandAll}>Expand All</button>
              </div>
            </div>
 
@@ -358,8 +357,7 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div className="eyebrow" style={{ fontSize: 10, color: "var(--ink-4)" }}>List Controls</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-secondary" onClick={handleCollapseAll} style={{ padding: "6px 12px", fontSize: 12 }}>Collapse All</button>
-            <button className="btn-primary" onClick={handleExpandAll} style={{ padding: "6px 12px", fontSize: 12 }}>Expand All</button>
+            <button className="btn-secondary" onClick={handleCollapseAll} style={{ padding: "6px 12px", fontSize: 12, flex: 1 }}>Collapse All</button>
           </div>
         </div>
         
@@ -368,15 +366,15 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.ready + stats.close + stats.blocked}</div>
             <div className="eyebrow" style={{ fontSize: 10, marginTop: 4 }}>Assemblies</div>
           </div>
-          <div className="row-hover" onClick={() => setStatusFilter('ready')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--ready)", cursor: "pointer", boxShadow: statusFilter === 'ready' ? '0 0 0 2px var(--ready)' : 'none' }}>
+          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--ready)", cursor: "pointer", boxShadow: statusFilter === 'ready' ? '0 0 0 2px var(--ready)' : 'none' }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.ready}</div>
             <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--ready-ink)" }}>Ready to Build</div>
           </div>
-          <div className="row-hover" onClick={() => setStatusFilter('close')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--pending)", cursor: "pointer", boxShadow: statusFilter === 'close' ? '0 0 0 2px var(--pending)' : 'none' }}>
+          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'close' ? 'all' : 'close')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--pending)", cursor: "pointer", boxShadow: statusFilter === 'close' ? '0 0 0 2px var(--pending)' : 'none' }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.close}</div>
             <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--pending-ink)" }}>Close (80-99%)</div>
           </div>
-          <div className="row-hover" onClick={() => setStatusFilter('blocked')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--threat)", cursor: "pointer", boxShadow: statusFilter === 'blocked' ? '0 0 0 2px var(--threat)' : 'none' }}>
+          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--threat)", cursor: "pointer", boxShadow: statusFilter === 'blocked' ? '0 0 0 2px var(--threat)' : 'none' }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.blocked}</div>
             <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--threat-ink)" }}>Blocked (&lt;60%)</div>
           </div>
@@ -384,7 +382,7 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
 
         <div 
           className="row-hover" 
-          onClick={() => setStatusFilter('noPO')}
+          onClick={() => setStatusFilter(statusFilter === 'noPO' ? 'all' : 'noPO')}
           style={{ 
             background: "var(--bg-sunken)", padding: "20px", borderRadius: 8, 
             textAlign: "center", cursor: "pointer", border: statusFilter === 'noPO' ? "2px solid var(--threat)" : "1px solid var(--border-subtle)"
