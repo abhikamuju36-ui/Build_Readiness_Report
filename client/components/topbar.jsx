@@ -40,11 +40,6 @@ function TopBar({ jobId, setJobId, job, setActiveTab, loading }) {
       </div>
 
       <div className="topbar-right">
-        <span className="status-pill"><span className="dot"/> ERP synced</span>
-        <button className="btn btn-ghost btn-sm">
-          <window.IconRefresh size={11}/> Sync now
-        </button>
-        <div style={{ width: 1, height: 22, background: "var(--border)" }}/>
         <div className="job-meta">
           <span className="l1">Active Job · {job.id}</span>
           <span className="l2">{job.name}</span>

@@ -162,7 +162,7 @@ function JobLandingScreen({ onLoad }) {
 
 // ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
-  const [jobId, setJobId] = useState(null);
+  const [jobId, setJobId] = useState(() => localStorage.getItem('sdc_active_job'));
   const [tab, setTab] = useState(() => localStorage.getItem('sdc_active_tab') || 'readiness');
   const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('sdc_status_filter') || 'all');
 
@@ -173,6 +173,10 @@ function App() {
 
   useEffect(() => { localStorage.setItem('sdc_active_tab', tab); }, [tab]);
   useEffect(() => { localStorage.setItem('sdc_status_filter', statusFilter); }, [statusFilter]);
+  useEffect(() => { 
+    if (jobId) localStorage.setItem('sdc_active_job', jobId);
+    else localStorage.removeItem('sdc_active_job');
+  }, [jobId]);
 
   useEffect(() => {
     if (!jobId) return;
