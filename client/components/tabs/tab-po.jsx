@@ -3,6 +3,7 @@ const { useState, useMemo, useEffect } = React;
 
 function PoTab({ data }) {
   const [view, setView] = useState('parts');
+  const [poViewMode, setPoViewMode] = useState('list'); // 'list' or 'schedule'
   const [query, setQuery] = useState('');
   const [expandAction, setExpandAction] = useState({ type: null, version: 0 });
   const vendors = useMemo(() => window.aggregateVendors(data.nopo, data.emails), [data]);
@@ -84,7 +85,31 @@ function PoTab({ data }) {
             </>
           )}
           {view === 'vendors' && <VendorList vendors={vendors} query={query}/>}
-          {view === 'pos' && <PoTracker poActions={data.poActions} query={query}/>}
+          {view === 'pos' && (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '8px 20px', borderBottom: '1px solid var(--border-soft)', background: 'var(--bg-2)', display: 'flex', gap: 8 }}>
+                <button 
+                  onClick={() => setPoViewMode('list')} 
+                  className={poViewMode === 'list' ? 'btn-primary' : 'btn-secondary'}
+                  style={{ padding: '4px 12px', fontSize: 11, borderRadius: 100 }}
+                >
+                  List View
+                </button>
+                <button 
+                  onClick={() => setPoViewMode('schedule')} 
+                  className={poViewMode === 'schedule' ? 'btn-primary' : 'btn-secondary'}
+                  style={{ padding: '4px 12px', fontSize: 11, borderRadius: 100 }}
+                >
+                  Schedule View
+                </button>
+              </div>
+              {poViewMode === 'list' ? (
+                <PoTracker poActions={data.poActions} query={query}/>
+              ) : (
+                <PoTimeline poActions={data.poActions} query={query} job={data.job}/>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -432,6 +457,182 @@ function PoTracker({ poActions, query }) {
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+function PoTimeline({ poActions, query, job }) {
+  const [expandedPo, setExpandedPo] = useState(null);
+  
+  const allPos = useMemo(() => {
+    const list = [
+      ...(poActions?.critical || []),
+      ...(poActions?.warning || []),
+      ...(poActions?.onTrack || [])
+    ];
+    return list.filter(entry => {
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return entry.supplier.toLowerCase().includes(q) || 
+             String(entry.po.poId).toLowerCase().includes(q) ||
+             entry.po.parts.some(p => p.partNumber.toLowerCase().includes(q) || p.partDesc.toLowerCase().includes(q));
+    });
+  }, [poActions, query]);
+
+  // Timeline Scale Logic
+  const today = new Date();
+  const buildStart = new Date(job.buildStart);
+  const ship = new Date(job.shipDate);
+  
+  // Set window: 4 months before Build Start to 1 month after Ship
+  const tMin = new Date(buildStart);
+  tMin.setMonth(tMin.getMonth() - 4);
+  const tMax = new Date(ship);
+  tMax.setMonth(tMax.getMonth() + 1);
+  
+  const totalMs = tMax - tMin;
+  const toPct = (d) => Math.max(0, Math.min(100, ((new Date(d) - tMin) / totalMs) * 100));
+
+  // Generate Week Headers
+  const weeks = useMemo(() => {
+    const arr = [];
+    let curr = new Date(tMin);
+    // Align to Sunday
+    curr.setDate(curr.getDate() - curr.getDay());
+    while (curr < tMax) {
+      arr.push(new Date(curr));
+      curr.setDate(curr.getDate() + 7);
+    }
+    return arr;
+  }, [tMin, tMax]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Timeline Header */}
+      <div style={{ 
+        display: 'grid', gridTemplateColumns: '240px 1fr', 
+        borderBottom: '1px solid var(--border-soft)', background: 'var(--bg-1)',
+        position: 'sticky', top: 0, zIndex: 100
+      }}>
+        <div style={{ padding: '12px 20px', borderRight: '1px solid var(--border-soft)', fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase' }}>Vendor / PO #</div>
+        <div style={{ position: 'relative', height: 40, overflow: 'hidden' }}>
+          {weeks.map((w, i) => (
+            <div key={i} style={{ 
+              position: 'absolute', left: `${toPct(w)}%`, top: 0, bottom: 0, 
+              width: `${(7 * 24 * 60 * 60 * 1000 / totalMs) * 100}%`,
+              borderLeft: '1px solid var(--border-subtle)', padding: '4px 8px',
+              fontSize: 9, color: 'var(--fg-3)', whiteSpace: 'nowrap'
+            }}>
+              {w.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </div>
+          ))}
+          {/* Milestones */}
+          <div style={{ position: 'absolute', left: `${toPct(today)}%`, top: 0, bottom: 0, width: 2, background: 'var(--sdc-blue)', opacity: 0.4, zIndex: 5 }} />
+          <div style={{ position: 'absolute', left: `${toPct(buildStart)}%`, top: 0, bottom: 0, width: 2, background: 'var(--threat)', opacity: 0.4, zIndex: 5 }} />
+        </div>
+      </div>
+
+      {/* Rows */}
+      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-raised)' }}>
+        {allPos.map((entry, i) => {
+          const start = entry.po.poDate ? new Date(entry.po.poDate) : new Date(new Date(entry.po.dueDate).getTime() - 21 * 24 * 60 * 60 * 1000);
+          const end = new Date(entry.po.dueDate);
+          const left = toPct(start);
+          const width = toPct(end) - left;
+          
+          const totalLines = entry.po.parts.length;
+          const rcvdLines = entry.po.parts.filter(p => p.received >= p.qty).length;
+          const pct = Math.round((rcvdLines / totalLines) * 100);
+          const isLate = entry.worstDays < 0;
+
+          return (
+            <div key={i} style={{ borderBottom: '1px solid var(--border-soft)' }}>
+              <div 
+                className="row-hover"
+                onClick={() => setExpandedPo(expandedPo === entry.po.poId ? null : entry.po.poId)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '240px 1fr', 
+                  alignItems: 'center', cursor: 'pointer', minHeight: 44,
+                  background: expandedPo === entry.po.poId ? 'var(--bg-2)' : 'transparent'
+                }}
+              >
+                <div style={{ 
+                  padding: '8px 20px', borderRight: '1px solid var(--border-soft)',
+                  display: 'flex', flexDirection: 'column', gap: 2
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <window.VendorAvatar vendor={entry.supplier} size={18} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.supplier}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--sdc-blue)', fontWeight: 700 }}>{entry.po.poId}</span>
+                    <span style={{ fontSize: 10, color: 'var(--fg-3)' }}>{pct}% Ready</span>
+                  </div>
+                </div>
+                
+                <div style={{ position: 'relative', height: '100%', minHeight: 44, display: 'flex', alignItems: 'center' }}>
+                   {/* Vertical Grid Lines */}
+                   {weeks.map((w, wi) => (
+                     <div key={wi} style={{ position: 'absolute', left: `${toPct(w)}%`, top: 0, bottom: 0, width: 1, background: 'var(--border-subtle)', opacity: 0.3 }} />
+                   ))}
+
+                   {/* Today/Build Start Markers */}
+                   <div style={{ position: 'absolute', left: `${toPct(today)}%`, top: 0, bottom: 0, width: 1, background: 'var(--sdc-blue)', opacity: 0.1 }} />
+                   <div style={{ position: 'absolute', left: `${toPct(buildStart)}%`, top: 0, bottom: 0, width: 1, background: 'var(--threat)', opacity: 0.1 }} />
+
+                   {/* PO Bar */}
+                   <div style={{ 
+                     position: 'absolute', left: `${left}%`, width: `${Math.max(width, 2)}%`,
+                     height: 14, borderRadius: 7,
+                     background: isLate ? 'var(--threat)' : pct === 100 ? 'var(--ready)' : 'var(--sdc-blue)',
+                     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                     display: 'flex', alignItems: 'center', padding: '0 4px',
+                     transition: 'all 0.2s'
+                   }}>
+                     <div style={{ height: '100%', width: `${pct}%`, background: 'rgba(255,255,255,0.2)', borderRadius: 7 }} />
+                   </div>
+                   
+                   {/* Label */}
+                   <span className="mono" style={{ 
+                     position: 'absolute', left: `${left + width + 1}%`, 
+                     fontSize: 9, fontWeight: 700, color: isLate ? 'var(--threat-ink)' : 'var(--fg-3)',
+                     whiteSpace: 'nowrap'
+                   }}>
+                     {entry.po.dueDate ? new Date(entry.po.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : ''}
+                     {isLate && ` (${Math.abs(entry.worstDays)}d LATE)`}
+                   </span>
+                </div>
+              </div>
+
+              {expandedPo === entry.po.poId && (
+                <div style={{ background: 'var(--bg-1)', padding: '12px 20px 12px 260px' }} className="fade-in">
+                  <div style={{ display: 'grid', gridTemplateColumns: '30px 120px 1fr 60px 80px 60px', gap: 12, marginBottom: 8 }}>
+                    <div className="eyebrow" style={{ fontSize: 9 }}></div>
+                    <div className="eyebrow" style={{ fontSize: 9 }}>Part #</div>
+                    <div className="eyebrow" style={{ fontSize: 9 }}>Description</div>
+                    <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Qty</div>
+                    <div className="eyebrow" style={{ fontSize: 9 }}>Due Date</div>
+                    <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Slip</div>
+                  </div>
+                  {entry.po.parts.map((p, pi) => {
+                    const isRcvd = p.received >= p.qty;
+                    return (
+                      <div key={pi} style={{ display: 'grid', gridTemplateColumns: '30px 120px 1fr 60px 80px 60px', gap: 12, alignItems: 'center', marginBottom: 6 }}>
+                        <div>{isRcvd ? <window.IconCheck size={12} style={{ color: 'var(--ready)' }}/> : <window.IconClock size={12} style={{ color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--pending)' }}/>}</div>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-1)', fontWeight: 600 }}>{p.partNumber}</span>
+                        <span style={{ fontSize: 11, color: 'var(--fg-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.partDesc}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-1)', textAlign: 'right' }}>{p.qty}</span>
+                        <span className="mono" style={{ fontSize: 10, color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--fg-3)' }}>{p.dueDate ? new Date(p.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}</span>
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--threat)', textAlign: 'right' }}>{p.daysUntilDue < 0 ? `${p.daysUntilDue}d` : ''}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
