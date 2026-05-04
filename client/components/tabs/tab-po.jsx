@@ -250,64 +250,130 @@ function VendorList({ vendors, query }) {
 }
 
 function PoTracker({ poActions, query }) {
-  const groups = [
-    { id: 'critical', label: 'OVERDUE / CRITICAL', data: poActions?.critical || [], color: 'var(--threat)' },
-    { id: 'warning', label: 'DUE WITHIN 14 DAYS', data: poActions?.warning || [], color: 'var(--pending)' },
-    { id: 'ontrack', label: 'HEALTHY SUPPLY', data: poActions?.onTrack || [], color: 'var(--sdc-blue)' },
-  ];
+  const [groupBy, setGroupBy] = useState('urgency'); // 'urgency', 'vendor', 'date', 'po'
+  const [expandedPos, setExpandedPos] = useState(new Set());
+
+  const allPos = useMemo(() => {
+    const list = [
+      ...(poActions?.critical || []),
+      ...(poActions?.warning || []),
+      ...(poActions?.onTrack || [])
+    ];
+    return list.filter(entry => {
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return entry.supplier.toLowerCase().includes(q) || 
+             String(entry.po.poId).toLowerCase().includes(q) ||
+             entry.po.parts.some(p => p.partNumber.toLowerCase().includes(q) || p.partDesc.toLowerCase().includes(q));
+    });
+  }, [poActions, query]);
+
+  const groups = useMemo(() => {
+    const g = {};
+    if (groupBy === 'urgency') {
+      g['OVERDUE / CRITICAL'] = allPos.filter(p => p.worstDays < 0);
+      g['DUE WITHIN 14 DAYS'] = allPos.filter(p => p.worstDays >= 0 && p.worstDays <= 14);
+      g['HEALTHY SUPPLY'] = allPos.filter(p => p.worstDays > 14);
+    } else if (groupBy === 'vendor') {
+      allPos.forEach(p => {
+        if (!g[p.supplier]) g[p.supplier] = [];
+        g[p.supplier].push(p);
+      });
+    } else if (groupBy === 'date') {
+      allPos.forEach(p => {
+        const date = p.po.dueDate ? new Date(p.po.dueDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'No Date';
+        if (!g[date]) g[date] = [];
+        g[date].push(p);
+      });
+    } else if (groupBy === 'po') {
+       allPos.forEach(p => {
+        const prefix = String(p.po.poId).substring(0, 3) + 'XXX';
+        if (!g[prefix]) g[prefix] = [];
+        g[prefix].push(p);
+      });
+    }
+    return Object.entries(g)
+      .filter(([_, data]) => data.length > 0)
+      .map(([label, data]) => ({ label, data }));
+  }, [allPos, groupBy]);
+
+  const toggleExpand = (id) => {
+    const next = new Set(expandedPos);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setExpandedPos(next);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {groups.map(g => {
-        const filtered = g.data.filter(entry => {
-          if (!query) return true;
-          const q = query.toLowerCase();
-          return entry.supplier.toLowerCase().includes(q) || String(entry.po.poId).toLowerCase().includes(q);
-        });
-        if (filtered.length === 0) return null;
+      {/* View Controls */}
+      <div style={{ 
+        padding: '12px 20px', background: 'var(--bg-2)', borderBottom: '1px solid var(--border-soft)',
+        display: 'flex', alignItems: 'center', gap: 16
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase' }}>Group By:</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[
+            { id: 'urgency', label: 'Urgency' },
+            { id: 'vendor', label: 'Vendor' },
+            { id: 'date', label: 'Expected Date' },
+            { id: 'po', label: 'PO Series' },
+          ].map(opt => (
+            <button 
+              key={opt.id} 
+              onClick={() => setGroupBy(opt.id)}
+              className={groupBy === opt.id ? 'btn-primary' : 'btn-secondary'}
+              style={{ padding: '4px 12px', fontSize: 11, borderRadius: 100 }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        return (
-          <div key={g.id} style={{ marginBottom: 20 }}>
-            {/* Group Header */}
-            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: g.color }}/>
-              <span style={{ color: g.color, fontSize: 11, fontWeight: 700, letterSpacing: '0.02em' }}>{g.label} {filtered.length} POs</span>
-            </div>
+      {groups.map((group, gi) => (
+        <div key={gi}>
+          <div style={{ 
+            padding: '14px 20px', background: 'var(--bg-sunken)', 
+            borderBottom: '1px solid var(--border-soft)',
+            display: 'flex', alignItems: 'center', gap: 10
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--fg-2)', letterSpacing: '0.04em' }}>{group.label}</span>
+            <span style={{ fontSize: 10, color: 'var(--fg-3)', background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 10 }}>{group.data.length}</span>
+          </div>
 
-            {/* Table Header */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1.2fr 80px 1.2fr 100px 100px 100px',
-              padding: '10px 20px', gap: 14, background: 'var(--bg-2)', borderBottom: '1px solid var(--border-soft)'
-            }}>
-              <div className="eyebrow" style={{ fontSize: 9 }}>Supplier</div>
-              <div className="eyebrow" style={{ fontSize: 9 }}>PO #</div>
-              <div className="eyebrow" style={{ fontSize: 9 }}>Parts / Qty</div>
-              <div className="eyebrow" style={{ fontSize: 9 }}>PO Date</div>
-              <div className="eyebrow" style={{ fontSize: 9 }}>Expected Date</div>
-              <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Status</div>
-            </div>
-
-            {/* Rows */}
-            {filtered.map((entry, i) => {
-              const qty = entry.po.parts.reduce((a,p) => a + (p.qty || 1), 0);
-              const poDate = entry.po.dueDate ? new Date(new Date(entry.po.dueDate).getTime() - 21 * 24 * 60 * 60 * 1000) : null;
-              
-              return (
-                <div key={i} className="row-hover" style={{
-                  display: 'grid', gridTemplateColumns: '1.2fr 80px 1.2fr 100px 100px 100px',
-                  padding: '12px 20px', gap: 14, alignItems: 'center',
-                  borderBottom: '1px solid var(--border-soft)', cursor: 'pointer'
-                }}>
+          {group.data.map((entry, ei) => {
+            const isExpanded = expandedPos.has(entry.po.poId);
+            const totalLines = entry.po.parts.length;
+            const rcvdLines = entry.po.parts.filter(p => p.received >= p.qty).length;
+            const pct = Math.round((rcvdLines / totalLines) * 100);
+            
+            return (
+              <div key={ei} style={{ borderBottom: '1px solid var(--border-soft)' }}>
+                <div 
+                  className="row-hover"
+                  onClick={() => toggleExpand(entry.po.poId)}
+                  style={{
+                    display: 'grid', gridTemplateColumns: '1.2fr 100px 1.2fr 100px 100px 100px',
+                    padding: '14px 20px', gap: 14, alignItems: 'center', cursor: 'pointer',
+                    background: isExpanded ? 'var(--bg-2)' : 'transparent'
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <window.IconCaretRight size={10} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', color: 'var(--fg-3)' }}/>
                     <window.VendorAvatar vendor={entry.supplier} size={24} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-0)' }}>{entry.supplier}</span>
                   </div>
                   <div className="mono" style={{ fontSize: 12, color: 'var(--sdc-blue)', fontWeight: 600 }}>{entry.po.poId}</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg-1)' }}>
-                    {entry.po.parts.length} part{entry.po.parts.length>1?'s':''} <span style={{ color: 'var(--fg-3)' }}>({qty} qty)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 60, height: 6, background: 'var(--bg-3)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, background: pct === 100 ? 'var(--ready)' : 'var(--sdc-blue)', height: '100%' }}/>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--fg-1)', fontWeight: 600, minWidth: 35 }}>{pct}%</span>
+                    <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>({rcvdLines}/{totalLines} lines)</span>
                   </div>
                   <div className="mono" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
-                    {poDate ? poDate.toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}
+                    {entry.po.poDate ? new Date(entry.po.poDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}
                   </div>
                   <div className="mono" style={{ fontSize: 11, color: entry.worstDays < 0 ? 'var(--threat)' : 'var(--fg-1)', fontWeight: 600 }}>
                     {entry.po.dueDate ? new Date(entry.po.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : 'N/A'}
@@ -316,11 +382,56 @@ function PoTracker({ poActions, query }) {
                     <window.StatusBadge status={entry.worstDays < 0 ? 'PAST DUE' : entry.worstDays < 14 ? 'LATE/EXP' : 'OPEN'}/>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        );
-      })}
+
+                {isExpanded && (
+                  <div className="fade-in" style={{ background: 'var(--bg-1)', padding: '0 0 12px 0' }}>
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '60px 120px 1fr 60px 60px 100px 100px',
+                      padding: '10px 20px 8px 52px', borderBottom: '1px solid var(--border-soft)',
+                      background: 'var(--bg-2)', gap: 14
+                    }}>
+                      <div className="eyebrow" style={{ fontSize: 9 }}>Status</div>
+                      <div className="eyebrow" style={{ fontSize: 9 }}>Part #</div>
+                      <div className="eyebrow" style={{ fontSize: 9 }}>Description</div>
+                      <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Req</div>
+                      <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Rcvd</div>
+                      <div className="eyebrow" style={{ fontSize: 9 }}>Due Date</div>
+                      <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right' }}>Slip</div>
+                    </div>
+                    {entry.po.parts.map((p, pi) => {
+                      const isRcvd = p.received >= p.qty;
+                      return (
+                        <div key={pi} style={{
+                          display: 'grid', gridTemplateColumns: '60px 120px 1fr 60px 60px 100px 100px',
+                          padding: '10px 20px 10px 52px', gap: 14, alignItems: 'center',
+                          borderBottom: pi === entry.po.parts.length - 1 ? 'none' : '1px solid var(--border-soft)'
+                        }}>
+                          <div>
+                            {isRcvd ? 
+                              <span style={{ color: 'var(--ready)', display: 'flex' }}><window.IconCheck size={12}/></span> : 
+                              <span style={{ color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--pending)', display: 'flex' }}><window.IconClock size={12}/></span>
+                            }
+                          </div>
+                          <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg-1)' }}>{p.partNumber}</span>
+                          <span style={{ fontSize: 12, color: 'var(--fg-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.partDesc}</span>
+                          <span className="mono" style={{ fontSize: 12, color: 'var(--fg-1)', textAlign: 'right' }}>{p.qty}</span>
+                          <span className="mono" style={{ fontSize: 12, color: isRcvd ? 'var(--ready-ink)' : 'var(--fg-3)', textAlign: 'right' }}>{p.received}</span>
+                          <span className="mono" style={{ fontSize: 11, color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--fg-2)' }}>
+                            {p.dueDate ? new Date(p.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}
+                          </span>
+                          <span className="mono" style={{ textAlign: 'right', fontSize: 11, color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--fg-3)' }}>
+                            {p.daysUntilDue < 0 ? `${p.daysUntilDue}d` : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

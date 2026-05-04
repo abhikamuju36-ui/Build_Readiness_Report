@@ -25,7 +25,7 @@ function EmailsTab({ data, job }) {
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', margin: 0, letterSpacing: '-0.02em' }}>Vendor Emails</h1>
           <div style={{ fontSize: 13, color: 'var(--fg-2)', marginTop: 4 }}>
-            {data.emails.length} supplier follow-ups ready · {overdueCount} overdue · auto-drafted from open POs
+            {(data?.emails || []).length} supplier follow-ups ready · {overdueCount} overdue · auto-drafted from open POs
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -79,7 +79,7 @@ function EmailRow({ e, job, open, onToggle }) {
 
         {/* Contacts */}
         <span className="mono" style={{ fontSize: 11, color: 'var(--fg-3)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {e.contacts.join(', ')}
+          {(e.contacts || []).join(', ')}
         </span>
 
         {/* Actions */}
@@ -108,7 +108,7 @@ function EmailRow({ e, job, open, onToggle }) {
             <button className="btn-secondary" onClick={onCopy}>
               <window.IconCopy size={14} /> {copied ? 'Copied to Clipboard' : 'Copy Email Body'}
             </button>
-            <a href={`mailto:${e.contacts.join(',')}?subject=${encodeURIComponent(`SDC Job ${job?.id||''} — Expedite Request`)}&body=${encodeURIComponent(body)}`}
+            <a href={`mailto:${(e.contacts || []).join(',')}?subject=${encodeURIComponent(`SDC Job ${job?.id||''} — Expedite Request`)}&body=${encodeURIComponent(body)}`}
                className="btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontSize: 13, borderRadius: 6 }}
                onClick={ev => ev.stopPropagation()}>
               <window.IconMail size={14} stroke="white" /> Open in Mail Client

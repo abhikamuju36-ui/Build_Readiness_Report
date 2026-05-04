@@ -15,6 +15,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
   // Calculate accurate counts dynamically
   const stats = useMemo(() => {
     let ready = 0, close = 0, blocked = 0, noPO = 0;
+    let totalParts = 0, receivedParts = 0;
     const specCounts = {};
 
     readiness.forEach(s => {
@@ -26,9 +27,11 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
         else blocked++;
         
         noPO += (a.noPo || a.stats?.noPO || 0);
+        totalParts += (a.total || a.stats?.total || 0);
+        receivedParts += (a.ready || a.stats?.received || 0);
       });
     });
-    return { ready, close, blocked, noPO, specCounts };
+    return { ready, close, blocked, noPO, specCounts, totalParts, receivedParts };
   }, [readiness]);
 
   const filteredSpecs = useMemo(() => {
@@ -111,9 +114,48 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                 </button>
               ))}
             </div>
-          </div>
+           </div>
+           
+           {/* Sticky Schedule Bar Overlay */}
+           <div style={{ 
+             position: "sticky", top: 0, zIndex: 100, 
+             background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
+             border: "1px solid var(--border)", borderBottom: "2px solid var(--border-strong)",
+             borderRadius: "var(--r-md)", padding: "10px 18px",
+             display: "flex", alignItems: "center", justifyContent: "space-between",
+             boxShadow: "var(--shadow-md)", margin: "0 0 4px 0"
+           }}>
+             <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
+               <div style={{ display: "flex", flexDirection: "column" }}>
+                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Build Start</span>
+                 <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{new Date(job.buildStart).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}</span>
+               </div>
+               <div style={{ display: "flex", flexDirection: "column" }}>
+                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ship Date</span>
+                 <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{new Date(job.shipDate).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}</span>
+               </div>
+               <div style={{ width: 1, height: 24, background: "var(--border)" }}/>
+               <div style={{ display: "flex", flexDirection: "column" }}>
+                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Readiness</span>
+                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                   <div style={{ width: 100, height: 6, background: "var(--bg-sunken)", borderRadius: 3, overflow: "hidden" }}>
+                     <div style={{ width: `${Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%`, height: "100%", background: "var(--ready)" }}/>
+                   </div>
+                   <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ready-ink)" }}>{Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%</span>
+                 </div>
+               </div>
+             </div>
+             
+             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
+                  <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }}/>
+                  {Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build
+                </span>
+                <button className="btn btn-sm btn-primary" onClick={handleExpandAll}>Expand All</button>
+             </div>
+           </div>
 
-          <div className="card" style={{ overflow: "hidden" }}>
+           <div className="card" style={{ overflow: "hidden" }}>
             {filteredSpecs.map(spec => (
               <div key={spec.spec} id={`spec-${spec.spec}`}>
                 <div style={{ 
@@ -209,7 +251,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
           {(parts.length > 0 || children.length > 0) && (
              <div style={{
               display: "grid",
-              gridTemplateColumns: "70px 110px 1fr 50px 220px 90px 60px",
+              gridTemplateColumns: "70px 110px 90px 1fr 50px 180px 80px 80px 60px",
               gap: 14,
               padding: `10px 18px 8px ${34 + (depth * 20)}px`,
               fontSize: 10,
@@ -219,9 +261,9 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
               fontWeight: 600,
               borderBottom: "1px solid var(--border-subtle)",
             }}>
-              <span>Status</span><span>Part #</span><span>Description</span>
+              <span>Status</span><span>Part #</span><span>PO #</span><span>Description</span>
               <span style={{ textAlign: "right" }}>Qty</span><span>Vendor</span>
-              <span>ETA</span><span style={{ textAlign: "right" }}>Slip</span>
+              <span>Expected</span><span>Req</span><span style={{ textAlign: "right" }}>Slip</span>
             </div>
           )}
 
@@ -243,7 +285,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
             return (
               <div key={i} className="row-hover" style={{
                 display: "grid",
-                gridTemplateColumns: "70px 110px 1fr 50px 220px 90px 60px",
+                gridTemplateColumns: "70px 110px 90px 1fr 50px 180px 80px 80px 60px",
                 gap: 14,
                 padding: `10px 18px 10px ${34 + (depth * 20)}px`,
                 alignItems: "center",
@@ -261,7 +303,8 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
                   )}
                 </div>
                 <span style={{ fontSize: 13, color: "var(--ink-2)", fontWeight: 500 }}>{p.pn}</span>
-                <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13 }}>{p.desc}</span>
+                <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{po.poId || '—'}</span>
+                <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
                 <span className="mono tnum" style={{ textAlign: "right", color: "var(--ink-2)", fontSize: 13, paddingRight: 4 }}>{p.qty}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-2)", fontSize: 13 }}>
                   <window.VendorAvatar vendor={po.supplier || (isNoPo ? 'McMaster-Carr' : 'Unassigned')} size={20}/> 
@@ -270,6 +313,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
                   </span>
                 </span>
                 <span className="mono" style={{ color: "var(--ink-3)", fontSize: 12 }}>{po.dueDate ? new Date(po.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : 'TBD'}</span>
+                <span className="mono" style={{ color: "var(--ink-4)", fontSize: 11 }}>{p.requiredDate ? new Date(p.requiredDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}</span>
                 <span className="mono" style={{ textAlign: "right", color: slip > 0 ? "var(--threat-ink)" : "var(--ink-3)", fontSize: 12 }}>
                   {slip > 0 ? `+${slip}d` : slip < 0 ? `${slip}d` : '—'}
                 </span>
