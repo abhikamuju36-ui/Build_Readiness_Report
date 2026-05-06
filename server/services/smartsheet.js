@@ -41,50 +41,75 @@ async function findScheduleSheet(projectId) {
 
   const match = data.results.find(r =>
     r.objectType === 'sheet' &&
-    r.text && r.text.toLowerCase().includes('schedule')
+    r.text && (
+      r.text.toLowerCase().includes('schedule') || 
+      r.text.toLowerCase().includes('assembly') ||
+      r.text.toLowerCase().includes(projectId.toString())
+    )
   );
-  return match ? match.objectId : null;
+  return match ? { id: match.objectId, name: match.text } : null;
 }
 
 /**
- * Get build dates from a schedule sheet.
- * Returns { buildStart, buildComplete } as ISO date strings or null.
+ * Get build dates and milestones from a schedule sheet.
+ * Returns { buildStart, buildComplete, milestones, permalink, source }
  */
 async function getBuildDates(projectId) {
-  const sheetId = await findScheduleSheet(projectId);
-  if (!sheetId) return { buildStart: null, buildComplete: null, source: null };
+  const sheetInfo = await findScheduleSheet(projectId);
+  if (!sheetInfo) return { buildStart: null, buildComplete: null, milestones: [], permalink: null, source: null };
 
-  const sheet = await smartsheetFetch(`/sheets/${sheetId}`);
-  if (!sheet || !sheet.rows) return { buildStart: null, buildComplete: null, source: null };
+  const sheet = await smartsheetFetch(`/sheets/${sheetInfo.id}`);
+  if (!sheet || !sheet.rows) return { buildStart: null, buildComplete: null, milestones: [], permalink: null, source: null };
 
   // Find column indices
   const cols = {};
   (sheet.columns || []).forEach(c => {
     const name = (c.title || '').toLowerCase();
-    if (name.includes('task name') || name === 'task name') cols.taskName = c.id;
+    if (name.includes('task name')) cols.taskName = c.id;
     if (name.includes('start')) cols.start = c.id;
     if (name.includes('finish') || name.includes('end')) cols.finish = c.id;
+    if (name.includes('% complete')) cols.percent = c.id;
+    if (name.includes('health')) cols.health = c.id;
   });
 
   let buildStart = null;
   let buildComplete = null;
+  const milestones = [];
 
   (sheet.rows || []).forEach(row => {
     const cellMap = {};
-    (row.cells || []).forEach(c => { cellMap[c.columnId] = c.value; });
+    (row.cells || []).forEach(c => { cellMap[c.columnId] = { value: c.value, display: c.displayValue }; });
 
-    const taskName = (cellMap[cols.taskName] || '').toString().toLowerCase();
-    if (taskName.includes('builder 1') || taskName.includes('build start')) {
-      buildStart = cellMap[cols.start] || buildStart;
+    const taskName = (cellMap[cols.taskName]?.value || '').toString();
+    const taskNameLower = taskName.toLowerCase();
+
+    // Specific build dates
+    if (taskNameLower.includes('builder 1') || taskNameLower.includes('build start')) {
+      buildStart = cellMap[cols.start]?.value || buildStart;
     }
-    if (taskName.includes('build complete')) {
-      buildComplete = cellMap[cols.finish] || buildComplete;
+    if (taskNameLower.includes('build complete')) {
+      buildComplete = cellMap[cols.finish]?.value || buildComplete;
+    }
+
+    // Key Milestones (BOM, Assembly, Design, etc.)
+    const isMilestone = ['bom', 'assembly', 'design', 'test', 'ship', 'machine'].some(k => taskNameLower.includes(k)) && 
+                        !row.summary && taskName.length < 50;
+    
+    if (isMilestone && milestones.length < 6) {
+      milestones.push({
+        name: taskName,
+        percent: cellMap[cols.percent]?.value || 0,
+        health: cellMap[cols.health]?.display || cellMap[cols.health]?.value || 'Green',
+        finish: cellMap[cols.finish]?.value
+      });
     }
   });
 
   return {
     buildStart,
     buildComplete,
+    milestones,
+    permalink: sheet.permalink,
     source: sheet.name,
   };
 }

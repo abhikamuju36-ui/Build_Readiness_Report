@@ -189,13 +189,20 @@ function AssemblyPartGroup({ parent, parts, expandAction }) {
             <div className="eyebrow" style={{ fontSize: 10, textAlign: 'right' }}>Status</div>
           </div>
           {parts.map((p, i) => {
-            const hash = String(p.id || '').split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-            const urgency = hash % 3 === 0 ? 'overdue' : hash % 3 === 1 ? 'soon' : 'long';
-            const date = new Date(2026, 4, 1 + (hash % 20)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const today = new Date();
+            const req = p.requiredDate ? new Date(p.requiredDate) : null;
+            const diff = req ? Math.ceil((req - today) / 86400000) : null;
+            
+            let urgency = 'long';
+            if (diff !== null) {
+              if (diff < 0) urgency = 'overdue';
+              else if (diff <= 14) urgency = 'soon';
+            }
+
             const u = {
-              overdue: { cls: 'threat', label: 'OVERDUE', sub: `On (Mar 28)` },
-              soon:    { cls: 'pending', label: 'EOR SOON', sub: `+${(hash%5)+1}d (${date})` },
-              long:    { cls: 'blue', label: 'LONG-LEAD', sub: `+${(hash%30)+20}d (Jun 16)` },
+              overdue: { cls: 'threat', label: 'OVERDUE', sub: diff !== null ? `${Math.abs(diff)}d Late` : 'Past Due' },
+              soon:    { cls: 'pending', label: 'DUE SOON', sub: `In ${diff}d` },
+              long:    { cls: 'blue', label: 'FUTURE', sub: diff !== null ? `In ${diff}d` : 'TBD' },
             }[urgency];
 
             return (
@@ -204,7 +211,7 @@ function AssemblyPartGroup({ parent, parts, expandAction }) {
                 padding: '12px 20px 12px 52px', gap: 14, alignItems: 'center',
                 borderBottom: i === parts.length - 1 ? 'none' : '1px solid var(--border-soft)'
               }}>
-                <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--sdc-blue)', cursor: 'pointer' }}>{p.id}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--sdc-blue)', cursor: 'pointer' }}>{p.pn || p.id}</span>
                 <span style={{ fontSize: 13, color: 'var(--fg-1)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
                 <span className="mono" style={{ fontSize: 12, color: 'var(--fg-2)', textAlign: 'right' }}>{p.qty}</span>
                 <div style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>

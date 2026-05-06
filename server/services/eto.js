@@ -69,6 +69,7 @@ async function getBomRows(projectId, specId) {
         eps.ChildID,
         child.ItemCompanyID  AS ChildPN,
         child.ItemDescription AS ChildDesc,
+        child.Manufacturer AS Manufacturer,
         eps.ParentID,
         parent.ItemCompanyID AS ParentPN,
         parent.ItemDescription AS ParentDesc,

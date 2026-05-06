@@ -25,7 +25,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
         if (pct >= 85) ready++;
         else if (pct >= 60) close++;
         else blocked++;
-        
+
         noPO += (a.noPo || a.stats?.noPO || 0);
         totalParts += (a.total || a.stats?.total || 0);
         receivedParts += (a.ready || a.stats?.received || 0);
@@ -42,22 +42,22 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
 
     return readiness.map(s => {
       const specMatch = isSpecSearch && (String(s.spec).toLowerCase() === specNum || s.title.toLowerCase().includes(q));
-      
+
       return {
         ...s,
         assemblies: s.assemblies.filter(a => {
           const pct = a.pct || a.stats?.pct || 0;
           const status = (pct >= 85) ? 'ready' : (pct >= 60) ? 'close' : 'blocked';
           const matchesStatus = statusFilter === 'all' || status === statusFilter || (statusFilter === 'noPO' && (a.noPo || a.stats?.noPO) > 0);
-          
+
           if (!matchesStatus) return false;
           if (!query) return true;
-          if (specMatch) return true; 
+          if (specMatch) return true;
           if (isNoPoSearch && matchesStatus) return true; // Show all if no po status matched
 
-          return (a.name || '').toLowerCase().includes(q) || 
-                 (a.desc || '').toLowerCase().includes(q) ||
-                 (a.code || '').toLowerCase().includes(q);
+          return (a.name || '').toLowerCase().includes(q) ||
+            (a.desc || '').toLowerCase().includes(q) ||
+            (a.code || '').toLowerCase().includes(q);
         }),
       };
     }).filter(s => s.assemblies.length > 0);
@@ -68,7 +68,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <window.TimelineRibbon job={job} poActions={data.poActions} />
+      <window.TimelineRibbon job={job} poActions={data.poActions} smartsheet={data.buildDates} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: 24, alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -81,7 +81,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                 onChange={e => setQuery(e.target.value)}
               />
               {query && (
-                <button 
+                <button
                   onClick={() => setQuery('')}
                   style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--ink-4)', display: 'flex', alignItems: 'center' }}
                 >
@@ -89,7 +89,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                 </button>
               )}
               <window.IconFilter size={12} style={{ color: 'var(--ink-4)', cursor: 'pointer' }} />
-              <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }}/>
+              <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
               <span className="kbd">⌘K</span>
             </div>
             <div style={{ display: "flex", gap: 4, background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: 3 }}>
@@ -109,58 +109,58 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                   boxShadow: statusFilter === f.id ? "var(--shadow-sm)" : "none",
                   display: "inline-flex", alignItems: "center", gap: 6,
                 }}>
-                  {f.dot && <span className={`dot-led ${f.dot}`} style={{margin: 0}}/>}
+                  {f.dot && <span className={`dot-led ${f.dot}`} style={{ margin: 0 }} />}
                   {f.label}
                 </button>
               ))}
             </div>
-           </div>
-           
-           {/* Sticky Schedule Bar Overlay */}
-           <div style={{ 
-             position: "sticky", top: 0, zIndex: 100, 
-             background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
-             border: "1px solid var(--border)", borderBottom: "2px solid var(--border-strong)",
-             borderRadius: "var(--r-md)", padding: "10px 18px",
-             display: "flex", alignItems: "center", justifyContent: "space-between",
-             boxShadow: "var(--shadow-md)", margin: "0 0 4px 0"
-           }}>
-             <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
-               <div style={{ display: "flex", flexDirection: "column" }}>
-                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Build Start</span>
-                 <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{new Date(job.buildStart).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}</span>
-               </div>
-               <div style={{ display: "flex", flexDirection: "column" }}>
-                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ship Date</span>
-                 <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{new Date(job.shipDate).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}</span>
-               </div>
-               <div style={{ width: 1, height: 24, background: "var(--border)" }}/>
-               <div style={{ display: "flex", flexDirection: "column" }}>
-                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Readiness</span>
-                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                   <div style={{ width: 100, height: 6, background: "var(--bg-sunken)", borderRadius: 3, overflow: "hidden" }}>
-                     <div style={{ width: `${Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%`, height: "100%", background: "var(--ready)" }}/>
-                   </div>
-                   <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ready-ink)" }}>{Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%</span>
-                 </div>
-               </div>
-             </div>
-             
-             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
-                  <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }}/>
-                  {Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build
-                </span>
-             </div>
-           </div>
+          </div>
 
-           <div className="card" style={{ overflow: "hidden" }}>
+          {/* Sticky Schedule Bar Overlay */}
+          <div style={{
+            position: "sticky", top: 0, zIndex: 100,
+            background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
+            border: "1px solid var(--border)", borderBottom: "2px solid var(--border-strong)",
+            borderRadius: "var(--r-md)", padding: "10px 18px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            boxShadow: "var(--shadow-md)", margin: "0 0 4px 0"
+          }}>
+            <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Build Start</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{new Date(job.buildStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ship Date</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{new Date(job.shipDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              </div>
+              <div style={{ width: 1, height: 24, background: "var(--border)" }} />
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Readiness</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 100, height: 6, background: "var(--bg-sunken)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: `${Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%`, height: "100%", background: "var(--ready)" }} />
+                  </div>
+                  <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ready-ink)" }}>{Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
+                <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }} />
+                {Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build
+              </span>
+            </div>
+          </div>
+
+          <div className="card" style={{ overflow: "hidden" }}>
             {filteredSpecs.map(spec => (
               <div key={spec.spec} id={`spec-${spec.spec}`}>
-                <div style={{ 
-                  padding: "14px 18px", 
-                  display: "flex", 
-                  alignItems: "baseline", 
+                <div style={{
+                  padding: "14px 18px",
+                  display: "flex",
+                  alignItems: "baseline",
                   gap: 12,
                   background: "var(--bg-sunken)",
                   borderBottom: "1px solid var(--border-subtle)"
@@ -170,12 +170,12 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
                   </h2>
                   <span className="meta-line">{spec.lines} BOM lines · {spec.assemblies.length} assemblies</span>
                 </div>
-                
+
                 {spec.assemblies.map((a, i) => (
-                  <AssemblyRow 
-                    key={a.name} 
-                    a={a} 
-                    jobId={jobId} 
+                  <AssemblyRow
+                    key={a.name}
+                    a={a}
+                    jobId={jobId}
                     isLast={i === spec.assemblies.length - 1}
                     expandAction={expandAction}
                   />
@@ -188,11 +188,12 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
           </div>
         </div>
 
-        <RightRail 
-          stats={stats} 
-          readiness={readiness} 
-          critical={data.poActions?.critical || []} 
-          statusFilter={statusFilter} 
+        <RightRail
+          stats={stats}
+          readiness={readiness}
+          critical={data.poActions?.critical || []}
+          smartsheet={data.buildDates}
+          statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           handleExpandAll={handleExpandAll}
           handleCollapseAll={handleCollapseAll}
@@ -229,7 +230,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
         }}
       >
         <button style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
-          {open ? <window.IconCaretDown size={11}/> : <window.IconCaretRight size={11}/>}
+          {open ? <window.IconCaretDown size={11} /> : <window.IconCaretRight size={11} />}
         </button>
         <span className="mono" style={{ fontSize: "var(--t-sm)", color: "var(--ink-3)", padding: "2px 7px", background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: 3, justifySelf: "start" }}>{a.code || a.pn}</span>
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -248,7 +249,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
       {open && (
         <div className="fade-in" style={{ background: "var(--bg)", borderTop: "1px solid var(--border-subtle)" }}>
           {(parts.length > 0 || children.length > 0) && (
-             <div style={{
+            <div style={{
               display: "grid",
               gridTemplateColumns: "70px 110px 90px 1fr 50px 180px 80px 80px 60px",
               gap: 14,
@@ -267,11 +268,11 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
           )}
 
           {children.map((child, i) => (
-            <AssemblyRow 
-              key={child.pn + i} 
-              a={{ ...child, code: child.pn, status: (child.stats?.pct >= 85) ? 'ready' : (child.stats?.pct >= 60) ? 'close' : 'blocked', node: child }} 
-              jobId={jobId} 
-              isLast={false} 
+            <AssemblyRow
+              key={child.pn + i}
+              a={{ ...child, code: child.pn, status: (child.stats?.pct >= 85) ? 'ready' : (child.stats?.pct >= 60) ? 'close' : 'blocked', node: child }}
+              jobId={jobId}
+              isLast={false}
               depth={depth + 1}
               expandAction={expandAction}
             />
@@ -306,27 +307,27 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
                 <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
                 <span className="mono tnum" style={{ textAlign: "right", color: "var(--ink-2)", fontSize: 13, paddingRight: 4 }}>{p.qty}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-2)", fontSize: 13 }}>
-                  <window.VendorAvatar vendor={po.supplier || (isNoPo ? 'McMaster-Carr' : 'Unassigned')} size={20}/> 
+                  <window.VendorAvatar vendor={po.supplier || p.manufacturer || (isNoPo ? 'SDC' : 'Unassigned')} size={20} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {po.supplier || (isNoPo ? 'McMaster-Carr' : 'Unassigned')}
+                    {po.supplier || (p.manufacturer === 'SDC' ? 'In-house (SDC)' : p.manufacturer) || (isNoPo ? 'In-house (SDC)' : 'Unassigned')}
                   </span>
                 </span>
-                <span className="mono" style={{ color: "var(--ink-3)", fontSize: 12 }}>{po.dueDate ? new Date(po.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : 'TBD'}</span>
-                <span className="mono" style={{ color: "var(--ink-4)", fontSize: 11 }}>{p.requiredDate ? new Date(p.requiredDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}</span>
+                <span className="mono" style={{ color: "var(--ink-3)", fontSize: 12 }}>{po.dueDate ? new Date(po.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'TBD'}</span>
+                <span className="mono" style={{ color: "var(--ink-4)", fontSize: 11 }}>{p.requiredDate ? new Date(p.requiredDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</span>
                 <span className="mono" style={{ textAlign: "right", color: slip > 0 ? "var(--threat-ink)" : "var(--ink-3)", fontSize: 12 }}>
                   {slip > 0 ? `+${slip}d` : slip < 0 ? `${slip}d` : '—'}
                 </span>
               </div>
             );
           })}
-          
+
           {depth === 0 && (
             <div style={{ padding: "12px 8px 16px 34px", display: "flex", gap: 8 }}>
-              <button className="btn btn-sm"><window.IconExport size={11}/> Export Lines</button>
+              <button className="btn btn-sm"><window.IconExport size={11} /> Export Lines</button>
               <button className="btn btn-sm" style={{ background: "var(--sdc-blue-soft)", color: "var(--sdc-blue-ink)", borderColor: "var(--sdc-blue-soft)" }}>
-                <window.IconMail size={11}/> Draft Chase Email
+                <window.IconMail size={11} /> Draft Chase Email
               </button>
-              <button className="btn btn-sm btn-ghost"><window.IconLink size={11}/> Link in SolidWorks</button>
+              <button className="btn btn-sm btn-ghost"><window.IconLink size={11} /> Link in SolidWorks</button>
             </div>
           )}
         </div>
@@ -337,9 +338,9 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
 
 function Stat({ label, value, accent, mono }) {
   const colors = {
-    ready: "var(--ready-ink)", 
+    ready: "var(--ready-ink)",
     blue: "var(--sdc-blue-ink)",
-    threat: "var(--threat-ink)", 
+    threat: "var(--threat-ink)",
     neutral: "var(--ink-3)"
   };
   return (
@@ -349,9 +350,44 @@ function Stat({ label, value, accent, mono }) {
     </div>
   );
 }
-function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, handleExpandAll, handleCollapseAll }) {
+function RightRail({ stats, readiness, critical, smartsheet, statusFilter, setStatusFilter, handleExpandAll, handleCollapseAll }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Smartsheet Milestones */}
+      {smartsheet && smartsheet.milestones && smartsheet.milestones.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: "hidden", border: '1px solid var(--sdc-blue-soft)', background: 'linear-gradient(180deg, var(--bg-raised) 0%, var(--bg) 100%)' }}>
+          <div style={{ padding: "12px 16px", background: "var(--sdc-blue-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: "var(--sdc-blue-ink)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <window.IconCalendar size={12} /> Schedule Milestones
+            </span>
+            {smartsheet.permalink && (
+              <a href={smartsheet.permalink} target="_blank" style={{ fontSize: 10, fontWeight: 700, color: "var(--sdc-blue-ink)", textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                OPEN <window.IconExternal size={10} />
+              </a>
+            )}
+          </div>
+          <div style={{ padding: "8px 0" }}>
+            {smartsheet.milestones.map((m, i) => (
+              <div key={i} style={{ padding: "10px 16px", borderBottom: i < smartsheet.milestones.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>
+                    {Math.round(m.percent * 100)}%
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${m.percent * 100}%`, 
+                    height: '100%', 
+                    background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' 
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* List Controls */}
       <div className="card" style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -360,7 +396,7 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
             <button className="btn-secondary" onClick={handleCollapseAll} style={{ padding: "6px 12px", fontSize: 12, flex: 1 }}>Collapse All</button>
           </div>
         </div>
-        
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div className="row-hover" onClick={() => setStatusFilter('all')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--ink-4)", cursor: "pointer", boxShadow: statusFilter === 'all' ? '0 0 0 2px var(--ink-4)' : 'none' }}>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.ready + stats.close + stats.blocked}</div>
@@ -380,11 +416,11 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
           </div>
         </div>
 
-        <div 
-          className="row-hover" 
+        <div
+          className="row-hover"
           onClick={() => setStatusFilter(statusFilter === 'noPO' ? 'all' : 'noPO')}
-          style={{ 
-            background: "var(--bg-sunken)", padding: "20px", borderRadius: 8, 
+          style={{
+            background: "var(--bg-sunken)", padding: "20px", borderRadius: 8,
             textAlign: "center", cursor: "pointer", border: statusFilter === 'noPO' ? "2px solid var(--threat)" : "1px solid var(--border-subtle)"
           }}
         >
@@ -396,14 +432,14 @@ function RightRail({ stats, readiness, critical, statusFilter, setStatusFilter, 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)" }}>
           <span style={{ fontSize: 10, color: "var(--ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span className="dot-led threat" style={{margin:0}}/>Late / Critical POs
+            <span className="dot-led threat" style={{ margin: 0 }} />Late / Critical POs
           </span>
           <span className="badge badge-threat">{critical.length} LATE</span>
         </div>
         <div style={{ maxHeight: 460, overflowY: "auto" }}>
           {critical.slice(0, 15).map((entry, i) => (
             <div key={i} style={{ padding: "12px 18px", borderBottom: i < critical.length - 1 ? "1px solid var(--border-subtle)" : "none", display: "flex", alignItems: "center", gap: 14 }}>
-              <window.VendorAvatar vendor={entry.supplier} size={28}/>
+              <window.VendorAvatar vendor={entry.supplier} size={28} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.supplier}</div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--ink-4)", marginTop: 2 }}>PO {entry.po?.poId || '10XXXX'}</div>
