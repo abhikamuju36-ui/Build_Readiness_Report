@@ -87,7 +87,20 @@ async function getBomRows(projectId, specId) {
           JOIN tblPurchaseOrderDetails pod2
             ON rl.PurchaseDetailID = pod2.PurchaseDetailID
           WHERE pod2.ProjectID = @projectId AND pod2.ItemID = eps.ChildID
-        ), 0) AS ReceivedQty
+        ), 0) AS ReceivedQty,
+        ISNULL((
+          SELECT TOP 1 pod3.PurchasePrice
+          FROM tblPurchaseOrderDetails pod3
+          WHERE pod3.ItemID = eps.ChildID AND pod3.PurchasePrice > 0
+          ORDER BY pod3.PurchaseDetailID DESC
+        ), 0) AS UnitPrice,
+        (
+          SELECT TOP 1 rl3.[Date]
+          FROM tblReceiverLog rl3
+          JOIN tblPurchaseOrderDetails pod5 ON rl3.PurchaseDetailID = pod5.PurchaseDetailID
+          WHERE pod5.ProjectID = @projectId AND pod5.ItemID = eps.ChildID
+          ORDER BY rl3.[Date] DESC
+        ) AS LastReceivedDate
       FROM tblEngProductStructure eps
       JOIN tblEngItemMaster child  ON eps.ChildID  = child.ItemID
       JOIN tblEngItemMaster parent ON eps.ParentID = parent.ItemID

@@ -107,11 +107,11 @@ function PartsFlatView({ nopo, query, job }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{
-        display: 'grid', 
-        gridTemplateColumns: '150px 1fr 200px 80px 180px 140px',
-        padding: '12px 24px', 
+        display: 'grid',
+        gridTemplateColumns: '150px 1fr 200px 80px 90px 180px 140px',
+        padding: '12px 24px',
         gap: 24,
-        background: 'var(--bg-sunken)', 
+        background: 'var(--bg-sunken)',
         borderBottom: '1px solid var(--border-soft)',
         position: 'sticky', top: 0, zIndex: 10
       }}>
@@ -119,6 +119,7 @@ function PartsFlatView({ nopo, query, job }) {
         <div className="eyebrow" style={{ fontSize: 10 }}>Description</div>
         <div className="eyebrow" style={{ fontSize: 10 }}>Assembly / Source</div>
         <div className="eyebrow" style={{ fontSize: 10, textAlign: 'right' }}>Qty</div>
+        <div className="eyebrow" style={{ fontSize: 10, textAlign: 'right' }}>Unit $</div>
         <div className="eyebrow" style={{ fontSize: 10 }}>Manufacturer</div>
         <div className="eyebrow" style={{ fontSize: 10, textAlign: 'right' }}>Status</div>
       </div>
@@ -143,10 +144,11 @@ function PartsFlatView({ nopo, query, job }) {
             long:    { cls: 'blue', label: 'FUTURE', sub: diff !== null ? (p.requiredDate ? `In ${diff}d` : `Est In ${diff}d`) : 'TBD' },
           }[urgency];
 
+          const unitPrice = p.unitPrice || 0;
           return (
             <div key={i} className="row-hover" style={{
-              display: 'grid', 
-              gridTemplateColumns: '150px 1fr 200px 80px 180px 140px',
+              display: 'grid',
+              gridTemplateColumns: '150px 1fr 200px 80px 90px 180px 140px',
               padding: '14px 24px', gap: 24, alignItems: 'center',
               borderBottom: '1px solid var(--border-soft)',
               background: urgency === 'overdue' ? 'var(--threat-soft)' : 'transparent'
@@ -163,6 +165,9 @@ function PartsFlatView({ nopo, query, job }) {
                 <span style={{ fontSize: 11, color: 'var(--fg-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.parentDesc || 'Loose Parts'}</span>
               </div>
               <span className="mono" style={{ fontSize: 12, color: 'var(--fg-1)', textAlign: 'right' }}>{p.qty}</span>
+              <span className="mono tnum" style={{ fontSize: 12, textAlign: 'right', color: unitPrice > 0 ? 'var(--fg-1)' : 'var(--fg-4)' }}>
+                {unitPrice > 0 ? `$${unitPrice >= 1000 ? (unitPrice / 1000).toFixed(1) + 'K' : unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                  <window.VendorAvatar vendor={p.manufacturer || 'SDC'} size={20} />
                  <span style={{ fontSize: 12, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

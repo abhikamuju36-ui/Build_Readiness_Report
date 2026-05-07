@@ -106,6 +106,8 @@ function buildNestedTree(topNodeId, topPN, topDesc, childrenMap, assemblyIds, po
             poQty: child.POQty,
             receivedQty: child.ReceivedQty,
             requiredDate: child.RequiredDate,
+            unitPrice: child.UnitPrice || 0,
+            receivedDate: child.LastReceivedDate || null,
             status: child.ReceivedQty >= child.ItemQty ? 'received'
               : child.POQty > 0 ? 'ordered'
               : 'noPO',
@@ -315,6 +317,7 @@ function findNoPoParts(bomRows, assemblyIds) {
       parentDesc: r.ParentDesc,
       manufacturer: r.Manufacturer,
       requiredDate: r.RequiredDate,
+      unitPrice: r.UnitPrice || 0,
     }));
 }
 

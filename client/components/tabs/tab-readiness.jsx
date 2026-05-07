@@ -1,6 +1,115 @@
 // Build Readiness Tab — Premium SDC Design
 const { useState, useMemo, useEffect } = React;
 
+function RiskPartsPanel({ readiness, nopo }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const slipping = useMemo(() => {
+    const seen = new Set();
+    const parts = [];
+    readiness.forEach(spec => {
+      spec.assemblies.forEach(a => {
+        (a.node?.parts || []).forEach(p => {
+          if (seen.has(p.id)) return;
+          const po = p.pos?.[0];
+          if (po?.dueDate && p.requiredDate && new Date(po.dueDate) > new Date(p.requiredDate)) {
+            seen.add(p.id);
+            const slipDays = Math.round((new Date(po.dueDate) - new Date(p.requiredDate)) / 86400000);
+            parts.push({ ...p, slipDays, assemblyDesc: a.desc || a.code, po });
+          }
+        });
+      });
+    });
+    return parts.sort((a, b) => b.slipDays - a.slipDays);
+  }, [readiness]);
+
+  const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+
+  const totalSlipDays = slipping.reduce((s, p) => s + p.slipDays, 0);
+
+  const PanelHeader = ({ color, icon, label, count, sub }) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: `${color}08` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+          {icon} {label}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 10, padding: '1px 8px' }}>{count}</span>
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{sub}</span>
+    </div>
+  );
+
+  const ROW = { display: 'grid', gridTemplateColumns: '105px 1fr 90px 68px 68px 52px', gap: 10, padding: '6px 14px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', fontSize: 12 };
+  const HDR = { ...ROW, padding: '5px 14px', fontSize: 9, fontWeight: 700, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border-subtle)' };
+
+  return (
+    <div style={{ margin: '12px 0', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)' }}>
+
+      {/* Strip header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ink-3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Procurement Risk</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
+            <span style={{ color: '#c2410c', fontWeight: 700 }}>{slipping.length}</span> slipping delivery · <span style={{ color: 'var(--threat-ink)', fontWeight: 700 }}>{nopo.length}</span> no PO
+          </span>
+        </div>
+        <button onClick={() => setCollapsed(c => !c)} style={{ fontSize: 11, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 10px', cursor: 'pointer' }}>
+          {collapsed ? 'Show ↓' : 'Hide ↑'}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+
+          {/* ── Slipping Deliveries ── */}
+          <div style={{ borderRight: '1px solid var(--border-subtle)' }}>
+            <PanelHeader color="#c2410c" icon="⚠" label="Delivery Slip" count={slipping.length} sub={slipping.length > 0 ? `avg +${Math.round(totalSlipDays / slipping.length)}d late` : 'All on time'} />
+            <div style={HDR}>
+              <span>Part #</span><span>Description</span><span>Supplier</span><span>Req Date</span><span>Exp Date</span><span style={{ textAlign: 'right' }}>+Days</span>
+            </div>
+            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+              {slipping.length === 0 ? (
+                <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>All deliveries on time</div>
+              ) : slipping.map((p, i) => (
+                <div key={i} className="row-hover" style={{ ...ROW, background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pn}</span>
+                  <span style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>
+                  <span style={{ color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{p.po?.supplier || '—'}</span>
+                  <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
+                  <span className="mono" style={{ fontWeight: 700, color: '#c2410c', fontSize: 11 }}>{fmtDate(p.po?.dueDate)}</span>
+                  <span className="mono" style={{ textAlign: 'right', fontWeight: 700, color: '#c2410c', fontSize: 12 }}>+{p.slipDays}d</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── No PO Parts ── */}
+          <div>
+            <PanelHeader color="var(--threat-ink)" icon="✕" label="No Purchase Order" count={nopo.length} sub={nopo.length > 0 ? 'Not yet procured' : 'All parts have POs'} />
+            <div style={{ ...HDR, gridTemplateColumns: '105px 1fr 90px 70px 58px' }}>
+              <span>Part #</span><span>Description</span><span>Assembly</span><span>Req Date</span><span style={{ textAlign: 'right' }}>Qty</span>
+            </div>
+            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+              {nopo.length === 0 ? (
+                <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>All parts have purchase orders</div>
+              ) : nopo.map((p, i) => (
+                <div key={i} className="row-hover" style={{ ...ROW, gridTemplateColumns: '105px 1fr 90px 70px 58px', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pn || p.id}</span>
+                  <span style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>
+                  <span style={{ color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{p.parentPN || '—'}</span>
+                  <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
+                  <span className="mono" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--ink-2)', fontSize: 12 }}>{p.qty}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
 function statusColor(s) {
   if (s === 'ready' || s === 'received') return 'var(--ready)';
   if (s === 'close' || s === 'ordered') return 'var(--pending)';
@@ -8,13 +117,13 @@ function statusColor(s) {
   return 'var(--ink-4)';
 }
 
-function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jobId }) {
+function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jobId, onDrillDown }) {
   const { job, readiness } = data;
   const [expandAction, setExpandAction] = useState({ type: null, version: 0 });
 
   // Calculate accurate counts dynamically
   const stats = useMemo(() => {
-    let ready = 0, close = 0, blocked = 0, noPO = 0;
+    let ready = 0, close = 0, blocked = 0;
     let totalParts = 0, receivedParts = 0;
     const specCounts = {};
 
@@ -26,13 +135,14 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
         else if (pct >= 60) close++;
         else blocked++;
 
-        noPO += (a.noPo || a.stats?.noPO || 0);
         totalParts += (a.total || a.stats?.total || 0);
         receivedParts += (a.ready || a.stats?.received || 0);
       });
     });
+    // Use globally-deduplicated count from job.kpis — avoids double-counting shared parts
+    const noPO = data.job.kpis.noPO;
     return { ready, close, blocked, noPO, specCounts, totalParts, receivedParts };
-  }, [readiness]);
+  }, [readiness, data.job.kpis.noPO]);
 
   const filteredSpecs = useMemo(() => {
     const q = query.toLowerCase();
@@ -63,14 +173,17 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
     }).filter(s => s.assemblies.length > 0);
   }, [readiness, statusFilter, query]);
 
+
   const handleExpandAll = () => setExpandAction({ type: 'expand', version: expandAction.version + 1 });
   const handleCollapseAll = () => setExpandAction({ type: 'collapse', version: expandAction.version + 1 });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <window.TimelineRibbon job={job} poActions={data.poActions} smartsheet={data.buildDates} />
+      <window.TimelineRibbon job={job} poActions={data.poActions} smartsheet={data.buildDates} onDrillDown={onDrillDown} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: 24, alignItems: 'flex-start' }}>
+      <RiskPartsPanel readiness={data.readiness} nopo={data.nopo} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="search" style={{ flex: 1 }}>
@@ -128,11 +241,11 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
             <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Build Start</span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{new Date(job.buildStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{job.buildStart ? new Date(job.buildStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ship Date</span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{new Date(job.shipDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{job.shipDate ? new Date(job.shipDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}</span>
               </div>
               <div style={{ width: 1, height: 24, background: "var(--border)" }} />
               <div style={{ display: "flex", flexDirection: "column" }}>
@@ -149,8 +262,15 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
                 <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }} />
-                {Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build
+                {job.buildStart ? `${Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build` : 'Build date TBD'}
               </span>
+              <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
+              <button onClick={handleExpandAll} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-sunken)', color: 'var(--ink-2)', cursor: 'pointer' }}>
+                Expand All
+              </button>
+              <button onClick={handleCollapseAll} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-sunken)', color: 'var(--ink-2)', cursor: 'pointer' }}>
+                Collapse All
+              </button>
             </div>
           </div>
 
@@ -188,16 +308,31 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
           </div>
         </div>
 
-        <RightRail
-          stats={stats}
-          readiness={readiness}
-          critical={data.poActions?.critical || []}
-          smartsheet={data.buildDates}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          handleExpandAll={handleExpandAll}
-          handleCollapseAll={handleCollapseAll}
-        />
+        {/* Smartsheet Milestones — compact horizontal strip */}
+        {data.buildDates && data.buildDates.milestones && data.buildDates.milestones.length > 0 && (
+          <div style={{ border: '1px solid var(--sdc-blue-soft)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)' }}>
+            <div style={{ padding: '7px 14px', background: 'var(--sdc-blue-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <window.IconCalendar size={12} />
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--sdc-blue-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Schedule Milestones</span>
+              {data.buildDates.permalink && (
+                <a href={data.buildDates.permalink} target="_blank" style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--sdc-blue-ink)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  OPEN <window.IconExternal size={10} />
+                </a>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, padding: '8px 14px' }}>
+              {data.buildDates.milestones.map((m, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderRight: i < data.buildDates.milestones.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
+                  <div style={{ width: 60, height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${m.percent * 100}%`, height: '100%', background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>{Math.round(m.percent * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -205,124 +340,211 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
 
 function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
   const [open, setOpen] = useState(false);
+  const [childExpandAction, setChildExpandAction] = useState({ type: null, version: 0 });
   const node = a.node || {};
   const children = node.children || [];
   const parts = node.parts || [];
 
   useEffect(() => {
-    if (expandAction.type === 'expand') setOpen(true);
-    if (expandAction.type === 'collapse') setOpen(false);
+    if (expandAction.type === 'expand') { setOpen(true); setChildExpandAction(p => ({ type: 'expand', version: p.version + 1 })); }
+    if (expandAction.type === 'collapse') { setOpen(false); setChildExpandAction(p => ({ type: 'collapse', version: p.version + 1 })); }
   }, [expandAction.version]);
+
+  const handleToggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) setChildExpandAction(p => ({ type: 'expand', version: p.version + 1 }));
+  };
+
+  const pct     = a.pct || a.stats?.pct || 0;
+  const received = a.ready || a.stats?.received || 0;
+  const total    = a.total || a.stats?.total || 0;
+  const noPO     = a.noPo  || a.stats?.noPO  || 0;
+
+  const healthColor = pct >= 85 ? 'var(--ready)' : pct >= 60 ? 'var(--pending)' : 'var(--threat)';
+  const healthInk   = pct >= 85 ? 'var(--ready-ink)' : pct >= 60 ? '#92400e' : 'var(--threat-ink)';
+  const isSub = depth > 0;
+
+  const PART_COLS = "4px 66px 38px 105px 1fr 105px 130px 62px 62px 62px";
 
   return (
     <div style={{ borderBottom: isLast ? "none" : "1px solid var(--border-subtle)" }}>
+
+      {/* ── Assembly header ── */}
       <div
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
+        className="row-hover"
         style={{
           display: "grid",
-          gridTemplateColumns: "auto 120px 1fr auto auto",
+          gridTemplateColumns: "24px auto 1fr auto auto",
           alignItems: "center",
-          gap: 16,
-          padding: `14px 18px 14px ${18 + (depth * 20)}px`,
+          gap: 14,
+          padding: `${isSub ? 9 : 13}px 18px ${isSub ? 9 : 13}px ${(isSub ? 14 : 18) + depth * 20}px`,
           cursor: "pointer",
-          background: open ? "var(--bg-sunken)" : "var(--bg-raised)",
-          transition: "background 0.2s"
+          borderLeft: `4px solid ${open ? healthColor : 'transparent'}`,
+          background: open
+            ? (isSub ? 'rgba(0,0,0,0.02)' : 'var(--bg-sunken)')
+            : (isSub ? 'transparent' : 'var(--bg-raised)'),
+          transition: "background 0.15s, border-color 0.15s",
         }}
       >
-        <button style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-3)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-4)" }}>
           {open ? <window.IconCaretDown size={11} /> : <window.IconCaretRight size={11} />}
-        </button>
-        <span className="mono" style={{ fontSize: "var(--t-sm)", color: "var(--ink-3)", padding: "2px 7px", background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: 3, justifySelf: "start" }}>{a.code || a.pn}</span>
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={{ fontWeight: 600, fontSize: "var(--t-md)", color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.desc || 'No Description'}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 24, paddingRight: 10 }}>
-          <Stat label="READY" value={a.ready || a.stats?.received || 0} accent="ready" />
-          <Stat label="TOTAL" value={a.total || a.stats?.total || 0} accent="blue" />
-          <Stat label="SUB-ASSY" value={children.length} />
-          <Stat label="NO-PO" value={a.noPo || a.stats?.noPO || 0} accent={(a.noPo || a.stats?.noPO) > 0 ? "threat" : "neutral"} />
-          <Stat label="HEALTH" value={`${a.pct || a.stats?.pct || 0}%`} mono />
+
+        <span className="mono" style={{
+          fontSize: 11, color: "var(--ink-3)", padding: "2px 7px",
+          background: "var(--bg-sunken)", border: "1px solid var(--border)",
+          borderRadius: 3, whiteSpace: 'nowrap',
+        }}>{a.code || a.pn}</span>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <span style={{
+            fontWeight: isSub ? 600 : 700, fontSize: isSub ? 13 : 14,
+            color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>{a.desc || 'No Description'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--ink-4)' }}>
+            <span style={{ color: healthInk, fontWeight: 700 }}>{received}/{total} parts</span>
+            {children.length > 0 && <span>· {children.length} sub-assy</span>}
+            {noPO > 0 && <span style={{ color: 'var(--threat-ink)', fontWeight: 700 }}>· {noPO} no&nbsp;PO</span>}
+          </div>
         </div>
-        <window.HealthRing value={a.pct || a.stats?.pct || 0} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 8 }}>
+          <div style={{ width: 72, height: 5, background: 'var(--bg-sunken)', borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: healthColor, transition: 'width 0.4s' }} />
+          </div>
+          <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: healthInk, minWidth: 34, textAlign: 'right' }}>{pct}%</span>
+        </div>
+
+        <window.HealthRing value={pct} />
       </div>
 
       {open && (
         <div className="fade-in" style={{ background: "var(--bg)", borderTop: "1px solid var(--border-subtle)" }}>
-          {(parts.length > 0 || children.length > 0) && (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "70px 110px 90px 1fr 50px 180px 80px 80px 60px",
-              gap: 14,
-              padding: `10px 18px 8px ${34 + (depth * 20)}px`,
-              fontSize: 10,
-              color: "var(--ink-4)",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              fontWeight: 600,
-              borderBottom: "1px solid var(--border-subtle)",
-            }}>
-              <span>Status</span><span>Part #</span><span>PO #</span><span>Description</span>
-              <span style={{ textAlign: "right" }}>Qty</span><span>Vendor</span>
-              <span>Expected</span><span>Req</span><span style={{ textAlign: "right" }}>Slip</span>
-            </div>
-          )}
 
+          {/* Sub-assemblies first */}
           {children.map((child, i) => (
             <AssemblyRow
               key={child.pn + i}
-              a={{ ...child, code: child.pn, status: (child.stats?.pct >= 85) ? 'ready' : (child.stats?.pct >= 60) ? 'close' : 'blocked', node: child }}
+              a={{ ...child, code: child.pn, node: child }}
               jobId={jobId}
-              isLast={false}
+              isLast={i === children.length - 1 && parts.length === 0}
               depth={depth + 1}
-              expandAction={expandAction}
+              expandAction={childExpandAction}
             />
           ))}
 
+          {/* Parts column header */}
+          {parts.length > 0 && (
+            <div style={{
+              display: "grid", gridTemplateColumns: PART_COLS, gap: 10,
+              padding: `7px 18px 7px ${34 + depth * 20}px`,
+              fontSize: 9, color: "var(--ink-4)", letterSpacing: "0.07em",
+              textTransform: "uppercase", fontWeight: 700,
+              borderTop: children.length > 0 ? '2px solid var(--border-subtle)' : 'none',
+              borderBottom: "1px solid var(--border-subtle)",
+              background: 'var(--bg-sunken)',
+            }}>
+              <span />
+              <span>Status</span>
+              <span style={{ textAlign: "right" }}>Qty</span>
+              <span>Part #</span>
+              <span>Description</span>
+              <span>Manufacturer</span>
+              <span>Supplier</span>
+              <span>Req Date</span>
+              <span>Expected</span>
+              <span>Rcvd Date</span>
+            </div>
+          )}
+
+          {/* Parts */}
           {parts.map((p, i) => {
             const po = p.pos?.[0] || {};
-            const slip = po.dueDate && p.requiredDate ? Math.round((new Date(po.dueDate) - new Date(p.requiredDate)) / 86400000) : 0;
-            const isNoPo = p.status === 'noPO' || p.status === 'no_po';
+            const isNoPo  = p.status === 'noPO' || p.status === 'no_po';
+            const isRcvd  = p.status === 'received';
+            const isLate  = !isRcvd && !isNoPo && po.dueDate && new Date(po.dueDate) < new Date();
+
+            const stripColor  = isRcvd ? 'var(--ready)' : isNoPo ? 'var(--threat)' : isLate ? '#f97316' : '#f59e0b';
+            const statusColor = isRcvd ? 'var(--ready-ink)' : isNoPo ? 'var(--threat-ink)' : isLate ? '#c2410c' : '#92400e';
+            const rowBg       = isRcvd ? 'var(--ready-soft)' : isNoPo ? 'var(--threat-soft)' : isLate ? 'rgba(249,115,22,0.04)' : 'transparent';
+
+            const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+
+            const cell = { padding: "6px 0", alignSelf: 'center' };
+
             return (
               <div key={i} className="row-hover" style={{
-                display: "grid",
-                gridTemplateColumns: "70px 110px 90px 1fr 50px 180px 80px 80px 60px",
-                gap: 14,
-                padding: `10px 18px 10px ${34 + (depth * 20)}px`,
-                alignItems: "center",
-                fontSize: "var(--t-md)",
-                borderBottom: "1px solid var(--border-subtle)",
-                background: isNoPo ? "var(--threat-soft)" : "transparent"
+                display: "grid", gridTemplateColumns: PART_COLS, gap: 10,
+                padding: `0 18px 0 ${34 + depth * 20}px`,
+                alignItems: "stretch",
+                borderBottom: i === parts.length - 1 ? "none" : "1px solid var(--border-subtle)",
+                background: rowBg,
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {isNoPo ? (
-                    <span style={{ color: "var(--threat-ink)", fontWeight: 800, fontSize: 9, letterSpacing: '0.04em', display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <window.IconCircleX size={10} sw={2} /> NO PO
-                    </span>
-                  ) : (
-                    <window.StatusBadge status={p.status === 'received' ? 'RCVD' : p.status === 'ordered' ? 'PO' : 'PAST DUE'} />
-                  )}
-                </div>
-                <span style={{ fontSize: 13, color: "var(--ink-2)", fontWeight: 500 }}>{p.pn}</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>{po.poId || '—'}</span>
-                <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
-                <span className="mono tnum" style={{ textAlign: "right", color: "var(--ink-2)", fontSize: 13, paddingRight: 4 }}>{p.qty}</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-2)", fontSize: 13 }}>
-                  <window.VendorAvatar vendor={po.supplier || p.manufacturer || (isNoPo ? 'SDC' : 'Unassigned')} size={20} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {po.supplier || (p.manufacturer === 'SDC' ? 'In-house (SDC)' : p.manufacturer) || (isNoPo ? 'In-house (SDC)' : 'Unassigned')}
+                {/* Colored left strip */}
+                <div style={{ background: stripColor, alignSelf: 'stretch' }} />
+
+                {/* Status */}
+                <div style={{ display: "flex", alignItems: "center", ...cell }}>
+                  <span style={{ color: statusColor, fontWeight: 800, fontSize: 9, letterSpacing: '0.05em', display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    {isNoPo  ? <><window.IconCircleX size={10} sw={2.5} /> NO PO</>
+                    : isRcvd ? <><window.IconCheck size={10} sw={2.5} /> RCVD</>
+                    : isLate ? <><window.IconAlert size={10} sw={2} /> LATE</>
+                              : <><window.IconClock size={10} sw={2} /> ON ORDER</>}
                   </span>
-                </span>
-                <span className="mono" style={{ color: "var(--ink-3)", fontSize: 12 }}>{po.dueDate ? new Date(po.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'TBD'}</span>
-                <span className="mono" style={{ color: "var(--ink-4)", fontSize: 11 }}>{p.requiredDate ? new Date(p.requiredDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</span>
-                <span className="mono" style={{ textAlign: "right", color: slip > 0 ? "var(--threat-ink)" : "var(--ink-3)", fontSize: 12 }}>
-                  {slip > 0 ? `+${slip}d` : slip < 0 ? `${slip}d` : '—'}
-                </span>
+                </div>
+
+                {/* Qty */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...cell }}>
+                  <span className="mono tnum" style={{ color: "var(--ink-2)", fontSize: 13, fontWeight: 600 }}>{p.qty}</span>
+                </div>
+
+                {/* Part # */}
+                <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
+                  <span className="mono" style={{ fontSize: 12, color: "var(--sdc-blue)", fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.pn}</span>
+                </div>
+
+                {/* Description */}
+                <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
+                  <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
+                </div>
+
+                {/* Manufacturer */}
+                <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
+                  <span style={{ color: "var(--ink-3)", fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {p.manufacturer === 'SDC' ? 'In-house (SDC)' : p.manufacturer || '—'}
+                  </span>
+                </div>
+
+                {/* Supplier */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: 'hidden', ...cell }}>
+                  {po.supplier && <window.VendorAvatar vendor={po.supplier} size={18} />}
+                  <span style={{ color: "var(--ink-2)", fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {po.supplier || '—'}
+                  </span>
+                </div>
+
+                {/* Req Date */}
+                <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
+                  <span className="mono" style={{ color: "var(--ink-3)", fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
+                </div>
+
+                {/* Expected */}
+                <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
+                  <span className="mono" style={{ color: isLate ? '#c2410c' : "var(--ink-3)", fontSize: 11, fontWeight: (po.dueDate && p.requiredDate && new Date(po.dueDate) > new Date(p.requiredDate)) ? 700 : 400 }}>{fmtDate(po.dueDate)}</span>
+                </div>
+
+                {/* Rcvd Date */}
+                <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
+                  <span className="mono" style={{ color: p.receivedDate ? 'var(--ready-ink)' : "var(--ink-4)", fontSize: 11 }}>{fmtDate(p.receivedDate)}</span>
+                </div>
               </div>
             );
           })}
 
           {depth === 0 && (
-            <div style={{ padding: "12px 8px 16px 34px", display: "flex", gap: 8 }}>
+            <div style={{ padding: "10px 18px 14px", display: "flex", gap: 8, borderTop: '1px solid var(--border-subtle)' }}>
               <button className="btn btn-sm"><window.IconExport size={11} /> Export Lines</button>
               <button className="btn btn-sm" style={{ background: "var(--sdc-blue-soft)", color: "var(--sdc-blue-ink)", borderColor: "var(--sdc-blue-soft)" }}>
                 <window.IconMail size={11} /> Draft Chase Email
@@ -347,109 +569,6 @@ function Stat({ label, value, accent, mono }) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, minWidth: 60 }}>
       <span className={mono ? "mono" : ""} style={{ fontSize: "var(--t-md)", fontWeight: 600, color: accent ? colors[accent] : "var(--ink)" }}>{value}</span>
       <span style={{ fontSize: 9, color: "var(--ink-4)", letterSpacing: 0.04, textTransform: "uppercase", marginTop: 3, fontWeight: 600 }}>{label}</span>
-    </div>
-  );
-}
-function RightRail({ stats, readiness, critical, smartsheet, statusFilter, setStatusFilter, handleExpandAll, handleCollapseAll }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Smartsheet Milestones */}
-      {smartsheet && smartsheet.milestones && smartsheet.milestones.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: "hidden", border: '1px solid var(--sdc-blue-soft)', background: 'linear-gradient(180deg, var(--bg-raised) 0%, var(--bg) 100%)' }}>
-          <div style={{ padding: "12px 16px", background: "var(--sdc-blue-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 10, color: "var(--sdc-blue-ink)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <window.IconCalendar size={12} /> Schedule Milestones
-            </span>
-            {smartsheet.permalink && (
-              <a href={smartsheet.permalink} target="_blank" style={{ fontSize: 10, fontWeight: 700, color: "var(--sdc-blue-ink)", textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                OPEN <window.IconExternal size={10} />
-              </a>
-            )}
-          </div>
-          <div style={{ padding: "8px 0" }}>
-            {smartsheet.milestones.map((m, i) => (
-              <div key={i} style={{ padding: "10px 16px", borderBottom: i < smartsheet.milestones.length - 1 ? "1px solid var(--border-subtle)" : "none" }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>
-                    {Math.round(m.percent * 100)}%
-                  </span>
-                </div>
-                <div style={{ width: '100%', height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ 
-                    width: `${m.percent * 100}%`, 
-                    height: '100%', 
-                    background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' 
-                  }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* List Controls */}
-      <div className="card" style={{ padding: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div className="eyebrow" style={{ fontSize: 10, color: "var(--ink-4)" }}>List Controls</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-secondary" onClick={handleCollapseAll} style={{ padding: "6px 12px", fontSize: 12, flex: 1 }}>Collapse All</button>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-          <div className="row-hover" onClick={() => setStatusFilter('all')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--ink-4)", cursor: "pointer", boxShadow: statusFilter === 'all' ? '0 0 0 2px var(--ink-4)' : 'none' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.ready + stats.close + stats.blocked}</div>
-            <div className="eyebrow" style={{ fontSize: 10, marginTop: 4 }}>Assemblies</div>
-          </div>
-          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--ready)", cursor: "pointer", boxShadow: statusFilter === 'ready' ? '0 0 0 2px var(--ready)' : 'none' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.ready}</div>
-            <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--ready-ink)" }}>Ready to Build</div>
-          </div>
-          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'close' ? 'all' : 'close')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--pending)", cursor: "pointer", boxShadow: statusFilter === 'close' ? '0 0 0 2px var(--pending)' : 'none' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.close}</div>
-            <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--pending-ink)" }}>Close (80-99%)</div>
-          </div>
-          <div className="row-hover" onClick={() => setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked')} style={{ background: "var(--bg-sunken)", padding: "16px 12px", borderRadius: 8, borderLeft: "3px solid var(--threat)", cursor: "pointer", boxShadow: statusFilter === 'blocked' ? '0 0 0 2px var(--threat)' : 'none' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)" }}>{stats.blocked}</div>
-            <div className="eyebrow" style={{ fontSize: 10, marginTop: 4, color: "var(--threat-ink)" }}>Blocked (&lt;60%)</div>
-          </div>
-        </div>
-
-        <div
-          className="row-hover"
-          onClick={() => setStatusFilter(statusFilter === 'noPO' ? 'all' : 'noPO')}
-          style={{
-            background: "var(--bg-sunken)", padding: "20px", borderRadius: 8,
-            textAlign: "center", cursor: "pointer", border: statusFilter === 'noPO' ? "2px solid var(--threat)" : "1px solid var(--border-subtle)"
-          }}
-        >
-          <div style={{ fontSize: 32, fontWeight: 700, color: "var(--threat-ink)" }}>{stats.noPO}</div>
-          <div className="eyebrow" style={{ fontSize: 11, marginTop: 6, color: "var(--threat-ink)" }}>Parts — No PO</div>
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-subtle)" }}>
-          <span style={{ fontSize: 10, color: "var(--ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span className="dot-led threat" style={{ margin: 0 }} />Late / Critical POs
-          </span>
-          <span className="badge badge-threat">{critical.length} LATE</span>
-        </div>
-        <div style={{ maxHeight: 460, overflowY: "auto" }}>
-          {critical.slice(0, 15).map((entry, i) => (
-            <div key={i} style={{ padding: "12px 18px", borderBottom: i < critical.length - 1 ? "1px solid var(--border-subtle)" : "none", display: "flex", alignItems: "center", gap: 14 }}>
-              <window.VendorAvatar vendor={entry.supplier} size={28} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.supplier}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--ink-4)", marginTop: 2 }}>PO {entry.po?.poId || '10XXXX'}</div>
-              </div>
-              <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: "#8E2E2E" }}>-{entry.worstDays}d</span>
-            </div>
-          ))}
-          {critical.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>No late POs.</div>}
-        </div>
-      </div>
     </div>
   );
 }
