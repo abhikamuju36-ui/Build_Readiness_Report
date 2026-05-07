@@ -22,17 +22,15 @@ function CostTab({ data }) {
   };
   const sortIcon = (col) => sortBy !== col ? '' : (sortDir === 'asc' ? ' ↑' : ' ↓');
 
+  const hasBudget = job.estMat != null || job.estLabor != null;
   const totalActual = (job.actMat || 0) + (job.actLabor || 0);
-  const totalEstimate = (job.estMat || 0) + (job.estLabor || 0);
-  const totalRemaining = Math.max(0, totalEstimate - totalActual);
-  const pctOfEstimate = totalEstimate > 0 ? (totalActual / totalEstimate) * 100 : 0;
-  
-  const matLines = data.nopo.length + (data.readiness.reduce((acc, s) => acc + s.lines, 0));
-  const matBlocked = data.job.kpis.blocked || 0;
+  const totalEstimate = hasBudget ? ((job.estMat || 0) + (job.estLabor || 0)) : 0;
+  const totalRemaining = hasBudget ? Math.max(0, totalEstimate - totalActual) : null;
+  const pctOfEstimate = hasBudget && totalEstimate > 0 ? (totalActual / totalEstimate) * 100 : null;
 
-  const matVar = job.actMat - job.estMat;
-  const labVar = job.actLabor - job.estLabor;
-  const marginPp = (job.marginActual - job.marginTarget) * 100;
+  const matLines = data.readiness.reduce((acc, s) => acc + s.lines, 0);
+  const matBlocked = data.job.kpis.blocked || 0;
+  const totalLaborHrs = (job.actEngHrs || 0) + (job.actMfgHrs || 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', overflow: 'auto', paddingBottom: 20 }}>
@@ -63,33 +61,43 @@ function CostTab({ data }) {
             ${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ marginTop: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-2)', marginBottom: 6 }}>
-              <span><b style={{ color: 'var(--fg-1)' }}>{Math.round(pctOfEstimate)}%</b> of ${ (totalEstimate/1e6).toFixed(1) }M estimate</span>
-              <span><b style={{ color: 'var(--fg-1)' }}>${ (totalRemaining/1e6).toFixed(1) }M</b> remaining budget</span>
-            </div>
-            <div style={{ height: 6, background: 'var(--bg-3)', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
-              <div style={{ width: `${Math.min(100, pctOfEstimate)}%`, background: 'linear-gradient(90deg, #3B82F6, #10B981)', height: '100%' }} />
-            </div>
+            {hasBudget && pctOfEstimate != null ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--fg-2)', marginBottom: 6 }}>
+                  <span><b style={{ color: 'var(--fg-1)' }}>{Math.round(pctOfEstimate)}%</b> of ${(totalEstimate/1e6).toFixed(1)}M estimate</span>
+                  <span><b style={{ color: 'var(--fg-1)' }}>${(totalRemaining/1e6).toFixed(1)}M</b> remaining budget</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--bg-3)', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+                  <div style={{ width: `${Math.min(100, pctOfEstimate)}%`, background: 'linear-gradient(90deg, #3B82F6, #10B981)', height: '100%' }} />
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', fontStyle: 'italic' }}>No budget estimate in ERP — actuals only</div>
+            )}
           </div>
         </div>
 
         <div className="panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="eyebrow" style={{ fontSize: 10, color: 'var(--fg-2)' }}>MATERIALS</div>
           <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-            ${ (job.actMat / 1e6).toFixed(1) }M
+            {job.actMat >= 1e6 ? `$${(job.actMat / 1e6).toFixed(2)}M` : `$${(job.actMat / 1e3).toFixed(1)}K`}
           </div>
           <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
-            {matLines} lines received · {matBlocked} blocked
+            {matLines} BOM lines · {matBlocked} assemblies blocked
           </div>
         </div>
 
         <div className="panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="eyebrow" style={{ fontSize: 10, color: 'var(--fg-2)' }}>LABOR</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-            ${ (job.actLabor / 1e3).toFixed(1) }K
-          </div>
+          {job.actLabor != null ? (
+            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
+              ${(job.actLabor / 1e3).toFixed(1)}K
+            </div>
+          ) : (
+            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '-0.02em' }}>—</div>
+          )}
           <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 4 }}>
-            {job.actLabor > 0 ? 'Build in progress' : "Build hasn't started"} · {Math.round(job.actLabor / 80)} hrs
+            {totalLaborHrs > 0 ? `${totalLaborHrs.toLocaleString()} hrs logged` : 'No labor hours logged yet'}
           </div>
         </div>
       </div>

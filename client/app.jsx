@@ -170,6 +170,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
+  const [highlightPoIds, setHighlightPoIds] = useState([]);
 
   useEffect(() => { localStorage.setItem('sdc_active_tab', tab); }, [tab]);
   useEffect(() => { localStorage.setItem('sdc_status_filter', statusFilter); }, [statusFilter]);
@@ -181,14 +182,17 @@ function App() {
   useEffect(() => {
     if (!jobId) return;
 
-    // Try cache first
+    // Try cache first (30-minute TTL)
     try {
       const cached = localStorage.getItem(`sdc_cache_${jobId}_${CACHE_VERSION}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        setData(parsed);
-        setLoading(false);
-        return;
+        const age = Date.now() - (parsed._cachedAt || 0);
+        if (age < 30 * 60 * 1000) {
+          setData(parsed);
+          setLoading(false);
+          return;
+        }
       }
     } catch(e) {}
 
@@ -208,15 +212,20 @@ function App() {
           job: {
             id: raw.project.ProjectID,
             name: raw.project.ProjectName,
-            buildStart: raw.buildDates?.buildStart || '2026-06-01',
-            shipDate: raw.buildDates?.buildComplete || '2026-08-01',
+            buildStart: raw.buildDates?.buildStart || null,
+            shipDate: raw.buildDates?.buildComplete || null,
             kpis: { assemblies: 0, ready: 0, close: 0, blocked: 0, noPO: 0 },
             actMat: raw.projectCosting?.ActMaterials || 0,
-            estMat: raw.projectCosting?.EstMaterials || 0,
-            actLabor: (raw.projectCosting?.ActEngLabor || 0) + (raw.projectCosting?.ActMfgLabor || 0),
-            estLabor: (raw.projectCosting?.EstEngLabor || 0) + (raw.projectCosting?.EstMfgLabor || 0),
-            marginActual: (raw.projectCosting?.ActualMargin || 0) / 100,
-            marginTarget: (raw.projectCosting?.BudgetMargin || 0) / 100,
+            // treat $0/$1000 or missing as "no budget" — ETO project may lack budget data
+            estMat: (raw.projectCosting?.EstMaterials > 1000) ? raw.projectCosting.EstMaterials : null,
+            actLabor: ((raw.projectCosting?.ActEngLabor || 0) + (raw.projectCosting?.ActMfgLabor || 0)) || null,
+            estLabor: ((raw.projectCosting?.EstEngLabor || 0) + (raw.projectCosting?.EstMfgLabor || 0)) || null,
+            actEngHrs: raw.projectCosting?.ActEngHrs || 0,
+            actMfgHrs: raw.projectCosting?.ActMfgHrs || 0,
+            estEngHrs: raw.projectCosting?.EstEngHrs || 0,
+            estMfgHrs: raw.projectCosting?.EstMfgHrs || 0,
+            marginActual: raw.projectCosting?.ActualMargin != null ? raw.projectCosting.ActualMargin / 100 : null,
+            marginTarget: (raw.projectCosting?.BudgetMargin > 0) ? raw.projectCosting.BudgetMargin / 100 : null,
           },
           readiness: raw.specs.map(s => ({
             spec: s.specId,
@@ -265,10 +274,12 @@ function App() {
             if (a.status === 'ready') mapped.job.kpis.ready++;
             else if (a.status === 'close') mapped.job.kpis.close++;
             else mapped.job.kpis.blocked++;
-            mapped.job.kpis.noPO += a.noPo;
           });
         });
+        // Use globally-deduplicated noPo count — machine stats double-count shared parts
+        mapped.job.kpis.noPO = mapped.nopo.length;
 
+        mapped._cachedAt = Date.now();
         setData(mapped);
         saveRecentJob(String(jobId), mapped.job.name);
         localStorage.setItem(`sdc_cache_${jobId}_${CACHE_VERSION}`, JSON.stringify(mapped));
@@ -331,7 +342,6 @@ function App() {
     { id: 'readiness', label: 'Build Readiness', icon: <window.IconLayers size={14}/> },
     { id: 'po',        label: 'PO Tracker',       icon: <window.IconTruck size={14}/>, count: data.poActions?.critical?.length || 0, countAccent: 'threat' },
     { id: 'cost',      label: 'Project Costs',    icon: <window.IconDollar size={14}/> },
-    { id: 'emails',    label: 'Vendor Emails',    icon: <window.IconMail size={14}/>, count: data.emails?.length || 0, countAccent: 'pending' },
   ];
 
   return (
@@ -360,28 +370,28 @@ function App() {
 
         <div className="rail-section">
           <div className="rail-h">Quick Filters</div>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready'); }}>
+          <button className={`rail-item ${statusFilter === 'ready' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready'); setQuery(''); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led ready" style={{margin:0}}/></span>
               Ready to Build
             </span>
             <span className="count">{data.job.kpis.ready}</span>
           </button>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'close' ? 'all' : 'close'); }}>
+          <button className={`rail-item ${statusFilter === 'close' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'close' ? 'all' : 'close'); setQuery(''); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led pending" style={{margin:0}}/></span>
               Close (80–99%)
             </span>
             <span className="count">{data.job.kpis.close}</span>
           </button>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked'); }}>
+          <button className={`rail-item ${statusFilter === 'blocked' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked'); setQuery(''); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led threat" style={{margin:0}}/></span>
               Blocked / Risks
             </span>
             <span className="count">{data.job.kpis.blocked}</span>
           </button>
-          <button className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('all'); setQuery('no po'); }}>
+          <button className={`rail-item ${statusFilter === 'noPO' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'noPO' ? 'all' : 'noPO'); setQuery(''); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><window.IconCircleX size={12}/></span>
               Parts — No PO
@@ -395,7 +405,7 @@ function App() {
         <div className="rail-section">
           <div className="rail-h">Specs</div>
           {data.readiness.map(spec => (
-            <button key={spec.spec} className="rail-item" onClick={() => { setTab('readiness'); setQuery(`Spec ${spec.spec}`); }}>
+            <button key={spec.spec} className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('all'); setQuery(`Spec ${spec.spec}`); }}>
               <span style={{ display: 'flex', alignItems: 'center' }}>
                 <span className="ico"><window.IconBox size={12}/></span>
                 Spec {spec.spec} — Mech.
@@ -432,10 +442,9 @@ function App() {
 
       <main className="main">
         <div className="main-inner">
-          {tab === 'readiness' && <window.ReadinessTab data={data} query={query} setQuery={setQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} jobId={jobId}/>}
-          {tab === 'po' && <window.PoTab data={data}/>}
+          {tab === 'readiness' && <window.ReadinessTab data={data} query={query} setQuery={setQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} jobId={jobId} onDrillDown={ids => { setHighlightPoIds(ids); setTab('po'); }}/>}
+          {tab === 'po' && <window.PoTab data={data} highlightPoIds={highlightPoIds} onClearHighlight={() => setHighlightPoIds([])}/>}
           {tab === 'cost' && <window.CostTab data={data}/>}
-          {tab === 'emails' && <window.EmailsTab data={data} job={data.job}/>}
         </div>
       </main>
     </div>
