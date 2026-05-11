@@ -229,8 +229,7 @@ function buildPoActionList(poRows) {
   // Group by supplier
   const bySupplier = {};
   poRows.forEach(row => {
-    // Skip fully received lines
-    if (row.ReceivedQty >= row.PurchaseQty) return;
+
 
     const key = row.Supplier || 'Unknown';
     if (!bySupplier[key]) {
@@ -259,30 +258,46 @@ function buildPoActionList(poRows) {
       qty: row.PurchaseQty,
       received: row.ReceivedQty,
       remaining: row.PurchaseQty - row.ReceivedQty,
+      requiredDate: row.DateRequired,
+      expectedDate: row.PurchaseDateRequired,
       dueDate,
       daysUntilDue,
       price: row.PurchasePrice,
+      receivedDate: row.LastReceivedDate || null,
     });
   });
 
   // Flatten and categorize
-  const critical = []; // overdue
-  const warning = [];  // due within 14 days
-  const onTrack = [];  // due later
+  const critical = [];  // overdue
+  const warning = [];   // due within 14 days
+  const onTrack = [];   // due later
+  const delivered = []; // fully received
 
   Object.values(bySupplier).forEach(supplier => {
     Object.values(supplier.pos).forEach(po => {
-      const worstDays = Math.min(...po.parts.map(p => p.daysUntilDue ?? Infinity));
+      const allRcvd = po.parts.every(p => p.received >= p.qty);
+      const activeParts = po.parts.filter(p => p.received < p.qty);
+      
+      const worstDays = activeParts.length > 0 
+        ? Math.min(...activeParts.map(p => p.daysUntilDue ?? Infinity))
+        : Infinity;
+
       const entry = {
         ...supplier,
         po,
         worstDays,
       };
-      delete entry.pos; // remove the map, just attach the single PO
+      delete entry.pos;
 
-      if (worstDays < 0) critical.push(entry);
-      else if (worstDays <= 14) warning.push(entry);
-      else onTrack.push(entry);
+      if (allRcvd) {
+        delivered.push(entry);
+      } else if (worstDays < 0) {
+        critical.push(entry);
+      } else if (worstDays <= 14) {
+        warning.push(entry);
+      } else {
+        onTrack.push(entry);
+      }
     });
   });
 
@@ -292,7 +307,7 @@ function buildPoActionList(poRows) {
 
   // Also collect parts with NO PO at all (from BOM data, handled separately)
 
-  return { critical, warning, onTrack };
+  return { critical, warning, onTrack, delivered };
 }
 
 /**

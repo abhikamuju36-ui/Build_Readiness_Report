@@ -7,14 +7,16 @@ function RiskPartsPanel({ readiness, nopo }) {
   const slipping = useMemo(() => {
     const seen = new Set();
     const parts = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     readiness.forEach(spec => {
       spec.assemblies.forEach(a => {
         (a.node?.parts || []).forEach(p => {
           if (seen.has(p.id)) return;
           const po = p.pos?.[0];
-          if (po?.dueDate && p.requiredDate && new Date(po.dueDate) > new Date(p.requiredDate)) {
+          const dueDate = po?.dueDate ? new Date(po.dueDate) : null;
+          if (dueDate && p.requiredDate && dueDate > new Date(p.requiredDate) && dueDate <= today) {
             seen.add(p.id);
-            const slipDays = Math.round((new Date(po.dueDate) - new Date(p.requiredDate)) / 86400000);
+            const slipDays = Math.round((dueDate - new Date(p.requiredDate)) / 86400000);
             parts.push({ ...p, slipDays, assemblyDesc: a.desc || a.code, po });
           }
         });
@@ -28,7 +30,8 @@ function RiskPartsPanel({ readiness, nopo }) {
   const totalSlipDays = slipping.reduce((s, p) => s + p.slipDays, 0);
 
   const PanelHeader = ({ color, icon, label, count, sub }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: `${color}08` }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ position: 'absolute', inset: 0, background: color, opacity: 0.05, pointerEvents: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
           {icon} {label}
@@ -278,17 +281,17 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
             {filteredSpecs.map(spec => (
               <div key={spec.spec} id={`spec-${spec.spec}`}>
                 <div style={{
-                  padding: "14px 18px",
+                  padding: "8px 14px",
                   display: "flex",
                   alignItems: "baseline",
                   gap: 12,
                   background: "var(--bg-sunken)",
                   borderBottom: "1px solid var(--border-subtle)"
                 }}>
-                  <h2 style={{ margin: 0, fontSize: "var(--t-xl)", fontWeight: 600, letterSpacing: "-0.01em" }}>
+                  <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--ink)" }}>
                     Spec {spec.spec} — {spec.title}
                   </h2>
-                  <span className="meta-line">{spec.lines} BOM lines · {spec.assemblies.length} assemblies</span>
+                  <span className="meta-line" style={{ fontSize: 10 }}>{spec.lines} BOM lines · {spec.assemblies.length} assemblies</span>
                 </div>
 
                 {spec.assemblies.map((a, i) => (
@@ -365,21 +368,36 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
   const healthInk   = pct >= 85 ? 'var(--ready-ink)' : pct >= 60 ? '#92400e' : 'var(--threat-ink)';
   const isSub = depth > 0;
 
-  const PART_COLS = "4px 66px 38px 105px 1fr 105px 130px 62px 62px 62px";
+  const PART_COLS = "3px 54px 28px 90px 1fr 90px 110px 52px 52px 52px";
 
   return (
-    <div style={{ borderBottom: isLast ? "none" : "1px solid var(--border-subtle)" }}>
+    <div style={{ position: 'relative', borderBottom: isLast ? "none" : "1px solid var(--border-subtle)" }}>
+      {/* Full vertical tree line bridging to next sibling */}
+      {depth > 0 && !isLast && (
+        <div style={{
+          position: 'absolute',
+          left: 12 + (depth - 1) * 24 + 10,
+          top: 0,
+          bottom: 0,
+          width: 1,
+          background: 'var(--ink-4)',
+          opacity: 0.5,
+          zIndex: 0,
+          pointerEvents: 'none'
+        }} />
+      )}
 
       {/* ── Assembly header ── */}
       <div
         onClick={handleToggle}
         className="row-hover"
         style={{
+          position: "relative",
           display: "grid",
-          gridTemplateColumns: "24px auto 1fr auto auto",
+          gridTemplateColumns: "20px auto 1fr auto",
           alignItems: "center",
-          gap: 14,
-          padding: `${isSub ? 9 : 13}px 18px ${isSub ? 9 : 13}px ${(isSub ? 14 : 18) + depth * 20}px`,
+          gap: 10,
+          padding: `${isSub ? 2 : 4}px 12px ${isSub ? 2 : 4}px ${12 + depth * 24}px`,
           cursor: "pointer",
           borderLeft: `4px solid ${open ? healthColor : 'transparent'}`,
           background: open
@@ -388,36 +406,51 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
           transition: "background 0.15s, border-color 0.15s",
         }}
       >
+        {/* Solidworks-style tree connector */}
+        {depth > 0 && (
+          <div style={{
+            position: 'absolute',
+            left: 12 + (depth - 1) * 24 + 10,
+            top: 0,
+            bottom: '50%',
+            width: 14,
+            borderLeft: isLast ? '1px solid var(--ink-4)' : 'none',
+            borderBottom: '1px solid var(--ink-4)',
+            opacity: 0.5,
+            zIndex: 0,
+            pointerEvents: 'none'
+          }} />
+        )}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-4)" }}>
           {open ? <window.IconCaretDown size={11} /> : <window.IconCaretRight size={11} />}
         </div>
 
         <span className="mono" style={{
-          fontSize: 11, color: "var(--ink-3)", padding: "2px 7px",
-          background: "var(--bg-sunken)", border: "1px solid var(--border)",
-          borderRadius: 3, whiteSpace: 'nowrap',
+          fontSize: 11, fontWeight: 800, color: "var(--ink)", padding: "2px 6px",
+          background: "var(--bg-raised)", border: "1px solid var(--border-strong)",
+          boxShadow: "var(--shadow-sm)", borderRadius: 4, whiteSpace: 'nowrap',
         }}>{a.code || a.pn}</span>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
           <span style={{
-            fontWeight: isSub ? 600 : 700, fontSize: isSub ? 13 : 14,
+            fontWeight: 500, fontSize: isSub ? 11 : 12,
             color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>{a.desc || 'No Description'}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--ink-4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--ink-4)' }}>
             <span style={{ color: healthInk, fontWeight: 700 }}>{received}/{total} parts</span>
             {children.length > 0 && <span>· {children.length} sub-assy</span>}
             {noPO > 0 && <span style={{ color: 'var(--threat-ink)', fontWeight: 700 }}>· {noPO} no&nbsp;PO</span>}
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 8 }}>
-          <div style={{ width: 72, height: 5, background: 'var(--bg-sunken)', borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 6 }}>
+          <div style={{ width: 60, height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             <div style={{ width: `${pct}%`, height: '100%', background: healthColor, transition: 'width 0.4s' }} />
           </div>
-          <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: healthInk, minWidth: 34, textAlign: 'right' }}>{pct}%</span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: healthInk, minWidth: 28, textAlign: 'right' }}>{pct}%</span>
         </div>
 
-        <window.HealthRing value={pct} />
+
       </div>
 
       {open && (
@@ -437,15 +470,28 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
 
           {/* Parts column header */}
           {parts.length > 0 && (
-            <div style={{
-              display: "grid", gridTemplateColumns: PART_COLS, gap: 10,
-              padding: `7px 18px 7px ${34 + depth * 20}px`,
-              fontSize: 9, color: "var(--ink-4)", letterSpacing: "0.07em",
-              textTransform: "uppercase", fontWeight: 700,
-              borderTop: children.length > 0 ? '2px solid var(--border-subtle)' : 'none',
-              borderBottom: "1px solid var(--border-subtle)",
-              background: 'var(--bg-sunken)',
-            }}>
+            <div style={{ position: 'relative' }}>
+              {/* Full vertical line passing through header */}
+              <div style={{
+                position: 'absolute',
+                left: 12 + depth * 24 + 10,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                background: 'var(--ink-4)',
+                opacity: 0.5,
+                zIndex: 0,
+                pointerEvents: 'none'
+              }} />
+              <div style={{
+                display: "grid", gridTemplateColumns: PART_COLS, gap: 8,
+                padding: `4px 10px 4px ${36 + depth * 24}px`,
+                fontSize: 8, color: "#ffffff", letterSpacing: "0.06em",
+                textTransform: "uppercase", fontWeight: 700,
+                borderTop: children.length > 0 ? '2px solid var(--border-subtle)' : 'none',
+                borderBottom: "1px solid var(--ink)",
+                background: 'var(--ink-2)',
+              }}>
               <span />
               <span>Status</span>
               <span style={{ textAlign: "right" }}>Qty</span>
@@ -456,6 +502,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
               <span>Req Date</span>
               <span>Expected</span>
               <span>Rcvd Date</span>
+              </div>
             </div>
           )}
 
@@ -475,72 +522,102 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
             const cell = { padding: "6px 0", alignSelf: 'center' };
 
             return (
-              <div key={i} className="row-hover" style={{
-                display: "grid", gridTemplateColumns: PART_COLS, gap: 10,
-                padding: `0 18px 0 ${34 + depth * 20}px`,
-                alignItems: "stretch",
-                borderBottom: i === parts.length - 1 ? "none" : "1px solid var(--border-subtle)",
-                background: rowBg,
-              }}>
+              <div key={i} className="row-hover" style={{ position: 'relative' }}>
+                {/* Full vertical line if NOT last part */}
+                {i < parts.length - 1 && (
+                  <div style={{
+                    position: 'absolute',
+                    left: 12 + depth * 24 + 10,
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: 'var(--ink-4)',
+                    opacity: 0.5,
+                    zIndex: 0,
+                    pointerEvents: 'none'
+                  }} />
+                )}
+                {/* L-connector / Branch */}
+                <div style={{
+                  position: 'absolute',
+                  left: 12 + depth * 24 + 10,
+                  top: 0,
+                  bottom: '50%',
+                  width: 14,
+                  borderBottom: '1px solid var(--ink-4)',
+                  borderLeft: i === parts.length - 1 ? '1px solid var(--ink-4)' : 'none',
+                  opacity: 0.5,
+                  zIndex: 0,
+                  pointerEvents: 'none'
+                }} />
+
+                <div style={{
+                  display: "grid", gridTemplateColumns: PART_COLS, gap: 8,
+                  padding: `0 10px 0 ${36 + depth * 24}px`,
+                  alignItems: "stretch",
+                  borderBottom: i === parts.length - 1 ? "none" : "1px solid var(--border-subtle)",
+                  background: rowBg,
+                }}>
                 {/* Colored left strip */}
                 <div style={{ background: stripColor, alignSelf: 'stretch' }} />
 
                 {/* Status */}
                 <div style={{ display: "flex", alignItems: "center", ...cell }}>
-                  <span style={{ color: statusColor, fontWeight: 800, fontSize: 9, letterSpacing: '0.05em', display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    {isNoPo  ? <><window.IconCircleX size={10} sw={2.5} /> NO PO</>
-                    : isRcvd ? <><window.IconCheck size={10} sw={2.5} /> RCVD</>
-                    : isLate ? <><window.IconAlert size={10} sw={2} /> LATE</>
-                              : <><window.IconClock size={10} sw={2} /> ON ORDER</>}
+                  <span style={{ color: statusColor, fontWeight: 800, fontSize: 8, letterSpacing: '0.04em', display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    {isNoPo  ? <><window.IconCircleX size={9} sw={2.5} /> NO PO</>
+                    : isRcvd ? <><window.IconCheck size={9} sw={2.5} /> RCVD</>
+                    : isLate ? <><window.IconAlert size={9} sw={2} /> LATE</>
+                              : <><window.IconClock size={9} sw={2} /> ON ORDER</>}
                   </span>
                 </div>
 
                 {/* Qty */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...cell }}>
-                  <span className="mono tnum" style={{ color: "var(--ink-2)", fontSize: 13, fontWeight: 600 }}>{p.qty}</span>
+                  <span className="mono tnum" style={{ color: "var(--ink-2)", fontSize: 11, fontWeight: 600 }}>{p.qty}</span>
                 </div>
 
                 {/* Part # */}
                 <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
-                  <span className="mono" style={{ fontSize: 12, color: "var(--sdc-blue)", fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.pn}</span>
+                  <span className="mono" style={{ fontSize: 10, color: "var(--sdc-blue)", fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.pn}</span>
                 </div>
 
                 {/* Description */}
                 <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
-                  <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
+                  <span style={{ color: "var(--ink)", fontWeight: isNoPo ? 600 : 500, fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
                 </div>
 
                 {/* Manufacturer */}
                 <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', ...cell }}>
-                  <span style={{ color: "var(--ink-3)", fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: "var(--ink-3)", fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {p.manufacturer === 'SDC' ? 'In-house (SDC)' : p.manufacturer || '—'}
                   </span>
                 </div>
 
                 {/* Supplier */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, overflow: 'hidden', ...cell }}>
-                  {po.supplier && <window.VendorAvatar vendor={po.supplier} size={18} />}
-                  <span style={{ color: "var(--ink-2)", fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, overflow: 'hidden', ...cell }}>
+                  {po.supplier && <window.VendorAvatar vendor={po.supplier} size={14} />}
+                  <span style={{ color: "var(--ink-2)", fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {po.supplier || '—'}
                   </span>
                 </div>
 
                 {/* Req Date */}
                 <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
-                  <span className="mono" style={{ color: "var(--ink-3)", fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
+                  <span className="mono" style={{ color: "var(--ink-3)", fontSize: 9 }}>{fmtDate(p.requiredDate)}</span>
                 </div>
 
                 {/* Expected */}
                 <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
-                  <span className="mono" style={{ color: isLate ? '#c2410c' : "var(--ink-3)", fontSize: 11, fontWeight: (po.dueDate && p.requiredDate && new Date(po.dueDate) > new Date(p.requiredDate)) ? 700 : 400 }}>{fmtDate(po.dueDate)}</span>
+                  <span className="mono" style={{ color: isLate ? '#c2410c' : "var(--ink-3)", fontSize: 9, fontWeight: (po.dueDate && p.requiredDate && new Date(po.dueDate) > new Date(p.requiredDate)) ? 700 : 400 }}>{fmtDate(po.dueDate)}</span>
                 </div>
 
                 {/* Rcvd Date */}
                 <div style={{ display: 'flex', alignItems: 'center', ...cell }}>
-                  <span className="mono" style={{ color: p.receivedDate ? 'var(--ready-ink)' : "var(--ink-4)", fontSize: 11 }}>{fmtDate(p.receivedDate)}</span>
+                  <span className="mono" style={{ color: p.receivedDate ? 'var(--ready-ink)' : "var(--ink-4)", fontSize: 9 }}>{fmtDate(p.receivedDate)}</span>
                 </div>
               </div>
-            );
+            </div>
+          );
           })}
 
           {depth === 0 && (

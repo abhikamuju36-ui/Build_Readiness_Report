@@ -84,14 +84,13 @@ async function getBomRows(projectId, specId) {
         ISNULL((
           SELECT SUM(rl.QtyReceived)
           FROM tblReceiverLog rl
-          JOIN tblPurchaseOrderDetails pod2
-            ON rl.PurchaseDetailID = pod2.PurchaseDetailID
+          JOIN tblPurchaseOrderDetails pod2 ON rl.PurchaseDetailID = pod2.PurchaseDetailID
           WHERE pod2.ProjectID = @projectId AND pod2.ItemID = eps.ChildID
         ), 0) AS ReceivedQty,
         ISNULL((
           SELECT TOP 1 pod3.PurchasePrice
           FROM tblPurchaseOrderDetails pod3
-          WHERE pod3.ItemID = eps.ChildID AND pod3.PurchasePrice > 0
+          WHERE pod3.ProjectID = @projectId AND pod3.ItemID = eps.ChildID AND pod3.PurchasePrice > 0
           ORDER BY pod3.PurchaseDetailID DESC
         ), 0) AS UnitPrice,
         (

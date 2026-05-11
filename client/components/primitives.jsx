@@ -54,6 +54,7 @@ function StatusBadge({ status }) {
     "DUE":       { cls: "badge-pending", ico: null, label: "DUE" },
     "VEND":      { cls: "badge-pending", ico: null, label: "VEND" },
     "OPEN":      { cls: "badge-blue",    ico: null, label: "OPEN" },
+    "RECEIVED":  { cls: "badge-ready",  ico: <IconCheck size={10} sw={2} />, label: "RECEIVED" },
   };
   const m = map[status] || { cls: "badge-neutral", label: status };
   return <span className={`badge ${m.cls}`}>{m.ico}{m.label}</span>;
@@ -75,7 +76,7 @@ function HealthRing({ value, size = 38, stroke = 4 }) {
           strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round"
           style={{transition: "stroke-dashoffset .5s"}} />
       </svg>
-      <span style={{position:"absolute", fontSize: 11, fontFamily:"var(--font-mono)", fontWeight:600, color:"var(--ink-2)"}}>{value}</span>
+      <span style={{position:"absolute", fontSize: Math.max(8, Math.round(size * 0.28)), fontFamily:"var(--font-mono)", fontWeight:600, color:"var(--ink-2)"}}>{value}</span>
     </div>
   );
 }
@@ -83,18 +84,18 @@ function HealthRing({ value, size = 38, stroke = 4 }) {
 // ---- Vendor avatar (initial chip) ----
 function VendorAvatar({ vendor, size = 22 }) {
   const initials = (vendor || 'U').split(/[\s.]+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase().slice(0, 2);
-  
-  const colors = {
-    'Steven Douglas Corp.': '#D44A4A',
-    'Schneider Electric USA': '#429C5D',
-    'INDUSTRIAL PROFILE SYSTEMS': '#3D454D',
-    'NEFF Automation': '#3182CE',
-    'Dongguan GYU Precision': '#805AD5',
-    'Dongguan OYU Precision': '#805AD5',
-    'BW FLEXIBLE SYSTEMS': '#DD6B20'
-  };
 
-  const bgColor = colors[vendor] || "#5C6B7D";
+  const palette = [
+    '#3182CE','#429C5D','#805AD5','#DD6B20','#D44A4A',
+    '#2B8A8A','#C05621','#6B46C1','#2F855A','#C53030',
+    '#2C7A7B','#744210','#553C9A','#276749','#9B2C2C',
+    '#2A69AC','#B7791F','#4A5568','#285E61','#702459',
+  ];
+
+  const overrides = { 'Steven Douglas Corp.': '#D44A4A' };
+
+  const hash = (vendor || '').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0);
+  const bgColor = overrides[vendor] || palette[hash % palette.length];
   
   return (
     <span style={{

@@ -2,7 +2,7 @@
 const { useState, useEffect, useRef } = React;
 
 // Cache versioning — bump this whenever the mapped data shape changes
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v10';
 (function purgeStaleCaches() {
   try {
     for (const key of Object.keys(localStorage)) {
