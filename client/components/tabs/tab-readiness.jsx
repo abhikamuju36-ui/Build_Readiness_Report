@@ -198,79 +198,67 @@ function RiskPartsPanel({ nopo, poActions }) {
   );
 }
 
-function ReadinessTab({ data, onDrillDown }) {
+function ReadinessTab({ data, onDrillDown, highlightPoIds = [], onClearHighlight }) {
   const { job } = data;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <window.TimelineRibbon job={job} poActions={data.poActions} smartsheet={data.buildDates} onDrillDown={onDrillDown} />
 
-      <RiskPartsPanel readiness={data.readiness} nopo={data.nopo} poActions={data.poActions} />
+      <RiskPartsPanel nopo={data.nopo} poActions={data.poActions} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-
-          <div style={{ marginTop: 24 }}>
-            <div style={{ padding: '0 0 12px 4px', borderBottom: '1px solid var(--border-soft)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--fg-0)' }}>Supplier Readiness & POs</h2>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <window.StatusBadge status="READY" />
-                <window.StatusBadge status="PAST DUE" />
+      {/* Smartsheet Milestones — compact horizontal strip */}
+      {data.buildDates && data.buildDates.milestones && data.buildDates.milestones.length > 0 && (
+        <div style={{ border: '1px solid var(--sdc-blue-soft)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)', marginBottom: 12 }}>
+          <div style={{ padding: '7px 14px', background: 'var(--sdc-blue-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <window.IconCalendar size={12} />
+            <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--sdc-blue-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Schedule Milestones</span>
+            {data.buildDates.permalink && (
+              <a href={data.buildDates.permalink} target="_blank" style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--sdc-blue-ink)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                OPEN <window.IconExternal size={10} />
+              </a>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, padding: '8px 14px' }}>
+            {data.buildDates.milestones.map((m, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderRight: i < data.buildDates.milestones.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
+                <div style={{ width: 60, height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${m.percent * 100}%`, height: '100%', background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' }} />
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>{Math.round(m.percent * 100)}%</span>
               </div>
-            </div>
-            <window.PoTracker 
-              poActions={data.poActions} 
-              query={query} 
-              highlightPoIds={[]} 
-              onClearHighlight={() => {}} 
-            />
+            ))}
           </div>
         </div>
+      )}
 
-        {/* Smartsheet Milestones — compact horizontal strip */}
-        {data.buildDates && data.buildDates.milestones && data.buildDates.milestones.length > 0 && (
-          <div style={{ border: '1px solid var(--sdc-blue-soft)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)' }}>
-            <div style={{ padding: '7px 14px', background: 'var(--sdc-blue-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <window.IconCalendar size={12} />
-              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--sdc-blue-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Schedule Milestones</span>
-              {data.buildDates.permalink && (
-                <a href={data.buildDates.permalink} target="_blank" style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--sdc-blue-ink)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  OPEN <window.IconExternal size={10} />
-                </a>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, padding: '8px 14px' }}>
-              {data.buildDates.milestones.map((m, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderRight: i < data.buildDates.milestones.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
-                  <div style={{ width: 60, height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${m.percent * 100}%`, height: '100%', background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>{Math.round(m.percent * 100)}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      {/* Vendor Cards — always shown at bottom */}
+      <div style={{ marginTop: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 10 }}>Vendor Status</div>
+        <window.PoTracker poActions={data.poActions} query="" highlightPoIds={highlightPoIds} onClearHighlight={onClearHighlight} />
       </div>
+    </div>
   );
 }
 
 function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
   const [open, setOpen] = useState(false);
   const [childExpandAction, setChildExpandAction] = useState({ type: null, version: 0 });
+  const [partsLimit, setPartsLimit] = useState(50);
   const node = a.node || {};
   const children = node.children || [];
   const parts = node.parts || [];
 
   useEffect(() => {
     if (expandAction.type === 'expand') { setOpen(true); setChildExpandAction(p => ({ type: 'expand', version: p.version + 1 })); }
-    if (expandAction.type === 'collapse') { setOpen(false); setChildExpandAction(p => ({ type: 'collapse', version: p.version + 1 })); }
+    if (expandAction.type === 'collapse') { setOpen(false); setPartsLimit(50); setChildExpandAction(p => ({ type: 'collapse', version: p.version + 1 })); }
   }, [expandAction.version]);
 
   const handleToggle = () => {
     const next = !open;
     setOpen(next);
+    if (!next) setPartsLimit(50);
     if (next) setChildExpandAction(p => ({ type: 'expand', version: p.version + 1 }));
   };
 
@@ -422,7 +410,7 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
           )}
 
           {/* Parts */}
-          {parts.map((p, i) => {
+          {parts.slice(0, partsLimit).map((p, i) => {
             const po = p.pos?.[0] || {};
             const isNoPo  = p.status === 'noPO' || p.status === 'no_po';
             const isRcvd  = p.status === 'received';
@@ -535,15 +523,25 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
           );
           })}
 
-          {depth === 0 && (
-            <div style={{ padding: "10px 18px 14px", display: "flex", gap: 8, borderTop: '1px solid var(--border-subtle)' }}>
-              <button className="btn btn-sm"><window.IconExport size={11} /> Export Lines</button>
-              <button className="btn btn-sm" style={{ background: "var(--sdc-blue-soft)", color: "var(--sdc-blue-ink)", borderColor: "var(--sdc-blue-soft)" }}>
-                <window.IconMail size={11} /> Draft Chase Email
+          {/* Show more / show all button for large parts lists */}
+          {parts.length > partsLimit && (
+            <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>Showing {partsLimit} of {parts.length} parts</span>
+              <button
+                onClick={e => { e.stopPropagation(); setPartsLimit(l => Math.min(l + 50, parts.length)); }}
+                style={{ fontSize: 11, color: 'var(--sdc-blue)', background: 'none', border: '1px solid var(--sdc-blue-border,rgba(37,99,235,0.25))', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}
+              >
+                Show next 50
               </button>
-              <button className="btn btn-sm btn-ghost"><window.IconLink size={11} /> Link in SolidWorks</button>
+              <button
+                onClick={e => { e.stopPropagation(); setPartsLimit(parts.length); }}
+                style={{ fontSize: 11, color: 'var(--fg-3)', background: 'none', border: '1px solid var(--border-soft)', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}
+              >
+                Show all {parts.length}
+              </button>
             </div>
           )}
+
         </div>
       )}
     </div>

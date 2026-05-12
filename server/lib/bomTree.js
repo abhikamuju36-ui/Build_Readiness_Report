@@ -200,21 +200,31 @@ function buildReadinessSummary(topNodeId, topPN, topDesc, childrenMap, assemblyI
   if (tree.parts && tree.parts.length > 0) {
     const looseParts = tree.parts;
     const received = looseParts.filter(p => p.status === 'received').length;
+    const stats = {
+      total: looseParts.length,
+      received,
+      noPO: looseParts.filter(p => p.status === 'noPO').length,
+      ordered: looseParts.filter(p => p.status === 'ordered').length,
+      pct: looseParts.length ? Math.round((received / looseParts.length) * 100) : 0,
+    };
     machines.push({
       id: 'loose-parts',
       pn: 'Loose Parts',
       desc: 'Individual parts not assigned to an assembly',
       qty: 1,
-      stats: {
-        total: looseParts.length,
-        received,
-        noPO: looseParts.filter(p => p.status === 'noPO').length,
-        ordered: looseParts.filter(p => p.status === 'ordered').length,
-        pct: looseParts.length ? Math.round((received / looseParts.length) * 100) : 0,
-      },
+      stats,
       subAssemblies: { ready: [], close: [], blocked: [] },
       parts: looseParts,
-      node: null,
+      // Provide a proper node so AssemblyRow can render node.parts
+      node: {
+        id: 'loose-parts',
+        pn: 'Loose Parts',
+        desc: 'Individual parts not assigned to an assembly',
+        isAssembly: true,
+        children: [],
+        parts: looseParts,
+        stats,
+      },
     });
   }
 

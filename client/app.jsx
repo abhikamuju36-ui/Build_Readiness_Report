@@ -1,18 +1,6 @@
 // App shell — top bar, left rail sidebar, and main content routing
 const { useState, useEffect, useRef } = React;
 
-// Cache versioning — bump this whenever the mapped data shape changes
-const CACHE_VERSION = 'v11';
-(function purgeStaleCaches() {
-  try {
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('sdc_cache_') && !key.endsWith('_' + CACHE_VERSION)) {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch(e) {}
-})();
-
 // ─── Recent Jobs helpers ────────────────────────────────────────────────────
 function getRecentJobs() {
   try { return JSON.parse(localStorage.getItem('sdc_recent_jobs') || '[]'); }
@@ -164,17 +152,14 @@ function JobLandingScreen({ onLoad }) {
 function App() {
   const [jobId, setJobId] = useState(() => localStorage.getItem('sdc_active_job'));
   const [tab, setTab] = useState(() => localStorage.getItem('sdc_active_tab') || 'readiness');
-  const [statusFilter, setStatusFilter] = useState(() => localStorage.getItem('sdc_status_filter') || 'all');
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fetchKey, setFetchKey] = useState(0);
-  const [query, setQuery] = useState('');
   const [highlightPoIds, setHighlightPoIds] = useState([]);
 
   useEffect(() => { localStorage.setItem('sdc_active_tab', tab); }, [tab]);
-  useEffect(() => { localStorage.setItem('sdc_status_filter', statusFilter); }, [statusFilter]);
   useEffect(() => { 
     if (jobId) localStorage.setItem('sdc_active_job', jobId);
     else localStorage.removeItem('sdc_active_job');
@@ -182,20 +167,6 @@ function App() {
 
   useEffect(() => {
     if (!jobId) return;
-
-    // Try cache first (30-minute TTL)
-    try {
-      const cached = localStorage.getItem(`sdc_cache_${jobId}_${CACHE_VERSION}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const age = Date.now() - (parsed._cachedAt || 0);
-        if (age < 30 * 60 * 1000) {
-          setData(parsed);
-          setLoading(false);
-          return;
-        }
-      }
-    } catch(e) {}
 
     setLoading(true);
     setError(null);
@@ -269,7 +240,8 @@ function App() {
           nopo: raw.specs.flatMap(s => (s.noPoParts || []).map(p => ({
             ...p,
             parent: (p.parentPN ? `${p.parentPN} ` : '') + (p.parentDesc || p.parentPN || 'Loose Parts'),
-          })))
+          }))),
+          buildDates: raw.buildDates,
         };
 
         mapped.readiness.forEach(s => {
@@ -283,10 +255,8 @@ function App() {
         // Use globally-deduplicated noPo count — machine stats double-count shared parts
         mapped.job.kpis.noPO = mapped.nopo.length;
 
-        mapped._cachedAt = Date.now();
         setData(mapped);
         saveRecentJob(String(jobId), mapped.job.name);
-        localStorage.setItem(`sdc_cache_${jobId}_${CACHE_VERSION}`, JSON.stringify(mapped));
         setLoading(false);
       })
       .catch(err => {
@@ -310,7 +280,7 @@ function App() {
           <div className="eyebrow" style={{ color: 'var(--threat)' }}>Could Not Load Job #{jobId}</div>
           <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px', fontSize: 14 }}>{error}</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => { try { localStorage.removeItem(`sdc_cache_${jobId}_${CACHE_VERSION}`); } catch(e) {} setError(null); setData(null); setFetchKey(k => k + 1); }}>
+            <button className="btn btn-primary" onClick={() => { setError(null); setData(null); setFetchKey(k => k + 1); }}>
               Retry
             </button>
             <button className="btn" onClick={() => { setJobId(null); setError(null); setData(null); }}>
@@ -344,8 +314,8 @@ function App() {
   // ── Dashboard ──
   const navItems = [
     { id: 'readiness', label: 'Build Readiness', icon: <window.IconLayers size={14}/> },
-    { id: 'po',        label: 'PO Tracker',       icon: <window.IconTruck size={14}/>, count: data.poActions?.critical?.length || 0, countAccent: 'threat' },
-    { id: 'cost',      label: 'Project Costs',    icon: <window.IconDollar size={14}/> },
+    { id: 'po',        label: 'Procurement',      icon: <window.IconTruck size={14}/>, count: data.poActions?.critical?.length || 0, countAccent: 'threat' },
+    { id: 'cost',      label: 'Financials',       icon: <window.IconDollar size={14}/> },
   ];
 
   return (
@@ -366,55 +336,6 @@ function App() {
                   {item.count}
                 </span>
               )}
-            </button>
-          ))}
-        </div>
-
-        <div className="rail-divider"/>
-
-        <div className="rail-section">
-          <div className="rail-h">Quick Filters</div>
-          <button className={`rail-item ${statusFilter === 'ready' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'ready' ? 'all' : 'ready'); setQuery(''); }}>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="ico"><span className="dot-led ready" style={{margin:0}}/></span>
-              Ready to Build
-            </span>
-            <span className="count">{data.job.kpis.ready}</span>
-          </button>
-          <button className={`rail-item ${statusFilter === 'close' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'close' ? 'all' : 'close'); setQuery(''); }}>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="ico"><span className="dot-led pending" style={{margin:0}}/></span>
-              Close (60–84%)
-            </span>
-            <span className="count">{data.job.kpis.close}</span>
-          </button>
-          <button className={`rail-item ${statusFilter === 'blocked' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'blocked' ? 'all' : 'blocked'); setQuery(''); }}>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="ico"><span className="dot-led threat" style={{margin:0}}/></span>
-              Blocked / Risks
-            </span>
-            <span className="count">{data.job.kpis.blocked}</span>
-          </button>
-          <button className={`rail-item ${statusFilter === 'noPO' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'noPO' ? 'all' : 'noPO'); setQuery(''); }}>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="ico"><window.IconCircleX size={12}/></span>
-              Parts — No PO
-            </span>
-            <span className="count">{data.job.kpis.noPO}</span>
-          </button>
-        </div>
-
-        <div className="rail-divider"/>
-
-        <div className="rail-section">
-          <div className="rail-h">Specs</div>
-          {data.readiness.map(spec => (
-            <button key={spec.spec} className="rail-item" onClick={() => { setTab('readiness'); setStatusFilter('all'); setQuery(`Spec ${spec.spec}`); }}>
-              <span style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="ico"><window.IconBox size={12}/></span>
-                Spec {spec.spec} — Mech.
-              </span>
-              <span className="count">{spec.lines}</span>
             </button>
           ))}
         </div>
@@ -446,7 +367,7 @@ function App() {
 
       <main className="main">
         <div className="main-inner">
-          {tab === 'readiness' && <window.ReadinessTab data={data} onDrillDown={ids => { setHighlightPoIds(ids); setTab('po'); }}/>}
+          {tab === 'readiness' && <window.ReadinessTab data={data} onDrillDown={ids => setHighlightPoIds(ids)} highlightPoIds={highlightPoIds} onClearHighlight={() => setHighlightPoIds([])}/>}
           {tab === 'po' && <window.PoTab data={data} highlightPoIds={highlightPoIds} onClearHighlight={() => setHighlightPoIds([])}/>}
           {tab === 'cost' && <window.CostTab data={data}/>}
         </div>

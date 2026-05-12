@@ -56,10 +56,8 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
   const [view, setView] = useState('assemblies_split');
   const [query, setQuery] = useState('');
 
-  // When the timeline drills down with highlighted PO IDs, switch to the vendor-card view.
-  useEffect(() => {
-    if (highlightPoIds.length > 0) setView('pos');
-  }, [highlightPoIds]);
+  // Vendors have moved to Build Readiness tab — no sub-tab switch needed.
+  useEffect(() => {}, [highlightPoIds]);
 
   const lateCount = (data.poActions?.critical?.length || 0);
 
@@ -68,45 +66,36 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
       {/* Header section */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', margin: 0, letterSpacing: '-0.02em' }}>PO Tracker</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', margin: 0, letterSpacing: '-0.02em' }}>Procurement</h1>
           <div style={{ fontSize: 13, color: 'var(--fg-2)', marginTop: 4 }}>
             Proactive procurement view · {data.nopo.length} parts with no PO · {lateCount} POs running late
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="search" style={{ width: 240, height: 32 }}>
-            <window.IconSearch size={14}/>
-            <input
-              style={{ fontSize: 12 }}
-              placeholder="Search POs, parts, vendors..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--fg-3)', display: 'flex', alignItems: 'center' }}
-              >
-                <window.IconX size={14} />
-              </button>
-            )}
-          </div>
-          <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}>
-            <window.IconExport size={14} /> Export CSV
-          </button>
-          <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', fontSize: 12 }}>
-            <window.IconSparkle size={14} /> Send Chase Wave
-          </button>
+        <div className="search" style={{ width: 240, height: 32 }}>
+          <window.IconSearch size={14}/>
+          <input
+            style={{ fontSize: 12 }}
+            placeholder="Search POs, parts, vendors..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--fg-3)', display: 'flex', alignItems: 'center' }}
+            >
+              <window.IconX size={14} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 32, borderBottom: '1px solid var(--border-soft)', paddingBottom: 0 }}>
         {[
-          { id: 'assemblies_split', label: 'Assemblies Split', count: data.job.kpis.assemblies },
-          { id: 'pos',     label: 'Vendor Cards',  count: lateCount, alert: lateCount > 0 },
-          { id: 'parts',   label: 'All Parts',     count: data.readiness.reduce((s, spec) => s + (spec.lines || 0), 0) },
-          { id: 'emails',  label: 'Draft Emails',  count: data.emails?.length || 0 },
+          { id: 'assemblies_split', label: 'Assemblies',    count: data.job.kpis.assemblies },
+          { id: 'parts',            label: 'Parts List',     count: data.readiness.reduce((s, spec) => s + (spec.lines || 0), 0) },
+          { id: 'emails',           label: 'Vendor Emails',  count: data.emails?.length || 0 },
         ].map(v => (
           <button key={v.id} onClick={() => setView(v.id)} style={{
             padding: '12px 4px', fontSize: 13, fontWeight: view === v.id ? 600 : 500,
@@ -132,7 +121,6 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
           {view === 'parts'   && <PartsFlatView parts={data.readiness.flatMap(s => s.assemblies.flatMap(a => collectAllParts(a.node, a.code || a.pn, a.desc)))} query={query} job={data.job}/>}
           {view === 'emails'  && <EmailsPanel emails={data.emails || []} job={data.job}/>}
           {view === 'assemblies_split' && <window.AssemblyList data={data} query={query} setQuery={setQuery} />}
-          {view === 'pos' && <window.PoTracker poActions={data.poActions} query={query} highlightPoIds={highlightPoIds} onClearHighlight={onClearHighlight} />}
         </div>
       </div>
     </div>
@@ -349,14 +337,6 @@ function VendorCard({ v, highlightPoIds, expandedPos, togglePo, isHighlighted })
         })}
       </div>
       
-      <div className="vendor-card-footer">
-         <button className="btn-secondary btn-sm" style={{ gap: 4 }}>
-            <window.IconMail size={12} /> Email
-         </button>
-         <button className="btn-primary btn-sm" style={{ gap: 4 }}>
-            <window.IconSparkle size={12} /> Chase
-         </button>
-      </div>
     </div>
   );
 }
@@ -534,9 +514,6 @@ function EmailsPanel({ emails, job }) {
         </span>
         <button className="btn-secondary" onClick={onCopyAll} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', fontSize: 12 }}>
           <window.IconCopy size={13}/> {copied === 'all' ? 'Copied' : 'Copy All'}
-        </button>
-        <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', fontSize: 12 }}>
-          <window.IconSparkle size={13}/> Send Wave
         </button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>

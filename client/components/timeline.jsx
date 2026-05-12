@@ -67,6 +67,7 @@ function useTimelineDrag(scrollRef) {
 }
 
 function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
+  const [viewMode, setViewMode] = useState('ribbon'); // 'ribbon' or 'gantt'
   const [hoveredItem, setHoveredItem] = useState(null);
   const [pinnedItem, setPinnedItem] = useState(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -143,6 +144,39 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
     return buckets;
   }, [poActions]);
 
+  // ── Gantt tasks: Smartsheet tasks OR fallback from PO data ────────────
+  const ganttTasks = useMemo(() => {
+    if (smartsheet?.tasks?.length > 0) return smartsheet.tasks;
+    const now = new Date();
+    const allEntries = [
+      ...(poActions?.critical || []),
+      ...(poActions?.warning || []),
+      ...(poActions?.onTrack || []),
+      ...(poActions?.delivered || []),
+    ];
+    return allEntries
+      .filter(e => e.po?.dueDate)
+      .map(e => {
+        const parts = (e.po.parts || []).filter(p => (p.qty || 0) > 0);
+        const qty  = parts.reduce((s, p) => s + (p.qty  || 0), 0);
+        const rcvd = parts.reduce((s, p) => s + (p.received || 0), 0);
+        const cls  = poReceiptClass(e.po, now);
+        // Fallback start: PO date, or 14 days before due if missing
+        const dueD = new Date(e.po.dueDate);
+        const startFallback = new Date(+dueD - 14 * 86400000).toISOString().split('T')[0];
+        return {
+          id:      e.po.poId,
+          name:    `${e.supplier || 'Unknown'} — PO ${e.po.poId}`,
+          start:   e.po.poDate || startFallback,
+          finish:  e.po.dueDate,
+          percent: qty > 0 ? rcvd / qty : 0,
+          // 4-way health so colors stay distinct
+          health:  cls === 'red' ? 'Red' : cls === 'yellow' ? 'Yellow' : cls === 'green' ? 'Received' : 'OnTrack',
+        };
+      })
+      .sort((a, b) => new Date(a.finish) - new Date(b.finish));
+  }, [smartsheet, poActions]);
+
   // ── View range ─────────────────────────────────────────────────────────
   const allDates = [
     new Date(+today - 30 * 86400000),
@@ -163,6 +197,9 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
   const EDGE_PAD = 10;
   const dayToX = d => Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, ((+new Date(d) - +rangeStart) / 86400000) * DAY_W));
   const todayX = dayToX(today);
+  const xToDay = x => new Date(+rangeStart + (x / DAY_W) * 86400000);
+
+  const [draggingMilestone, setDraggingMilestone] = useState(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -218,6 +255,25 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
     .filter(m => m.actualDate)
     .sort((a, b) => +a.actualDate - +b.actualDate)
     .map((m, i) => ({ ...m, row: i % 2 }));
+
+  // ── Combined Gantt rows: milestone diamonds + task/summary bars ────────
+  const ganttRows = viewMode === 'gantt' ? (
+    smartsheet?.tasks?.length > 0
+      // Smartsheet connected: use tasks directly, type from flags
+      ? ganttTasks.map(t => ({
+          ...t,
+          type: t.isMilestone ? 'milestone' : t.isSummary ? 'summary' : 'task',
+          label: t.name,
+          date: (t.isMilestone && (t.finish || t.start)) ? new Date(t.finish || t.start) : null,
+          colorKey: (t.health || '').toLowerCase().includes('red') ? 'threat'
+                  : (t.health || '').toLowerCase().includes('yellow') ? 'pending' : 'ready',
+        }))
+      // No Smartsheet tasks: fallback milestones + PO bars
+      : [
+          ...milestones.map(m => ({ type: 'milestone', id: m.id, label: m.label, date: m.actualDate, colorKey: m.color })),
+          ...ganttTasks.map(t => ({ type: 'po', ...t })),
+        ]
+  ) : [];
 
   const TY = 160;
   const totalPOs = Object.values(summary).reduce((s, arr) => s + arr.length, 0);
@@ -327,15 +383,64 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
       </div>
 
       {/* ── Scrollable Calendar Strip ── */}
-      <div style={{ position: 'relative' }}>
-        {canScrollLeft && (
-          <button onClick={() => { scrollRef.current.scrollBy({ left: -300, behavior: 'smooth' }); }} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 40, width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-raised)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-2)', pointerEvents: 'all' }}>‹</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>Schedule & PO Tracking</div>
+        <button onClick={() => setViewMode(v => v === 'ribbon' ? 'gantt' : 'ribbon')} style={{ padding: '4px 12px', background: 'var(--bg-sunken)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer' }}>
+          {viewMode === 'ribbon' ? 'Switch to Full Gantt View' : 'Switch to Timeline Ribbon'}
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)' }}>
+        {/* Left fixed pane (Gantt only) */}
+        {viewMode === 'gantt' && ganttRows.length > 0 && (
+          <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--border-strong)', background: 'var(--bg-raised)', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: 56, borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)', padding: '0 14px', display: 'flex', alignItems: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink-4)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Schedule
+            </div>
+            <div style={{ paddingTop: 120 }}>
+              {ganttRows.map((row, i) => {
+                if (row.type === 'milestone') {
+                  const c = M[row.colorKey] || '#6b7280';
+                  return (
+                    <div key={`lp-${i}`} style={{ height: 28, padding: '0 14px 0 ' + (14 + (row.indentLevel || 0) * 16) + 'px', display: 'flex', alignItems: 'center', gap: 7, borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)', fontSize: 10.5, fontWeight: 700, color: 'var(--ink-1)' }}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, background: c, transform: 'rotate(45deg)', borderRadius: 1, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label || row.name}</span>
+                    </div>
+                  );
+                }
+                if (row.type === 'summary') {
+                  return (
+                    <div key={`lp-${i}`} style={{ height: 28, padding: '0 14px 0 ' + (14 + (row.indentLevel || 0) * 16) + 'px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', background: i % 2 === 0 ? 'rgba(37,99,235,0.04)' : 'rgba(37,99,235,0.07)', fontSize: 11, fontWeight: 700, color: 'var(--sdc-blue)', letterSpacing: '0.01em' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>▸ {row.name}</span>
+                    </div>
+                  );
+                }
+                // task or po
+                const isRcvd = (row.health || '') === 'Received' || (row.percent || 0) >= 1;
+                const isCrit = row.onCritical;
+                return (
+                  <div key={`lp-${i}`} style={{ height: 28, padding: '0 14px 0 ' + (14 + (row.indentLevel || 0) * 16) + 'px', display: 'flex', alignItems: 'center', gap: 5, borderBottom: '1px solid var(--border-subtle)', fontSize: 11, color: isRcvd ? 'var(--ink-4)' : isCrit ? '#dc2626' : 'var(--ink)', background: i % 2 === 0 ? 'var(--bg-raised)' : 'var(--bg-sunken)' }}>
+                    {isCrit && !isRcvd && <span style={{ width: 3, height: 14, background: '#dc2626', borderRadius: 2, flexShrink: 0 }} />}
+                    {isRcvd && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 800, flexShrink: 0 }}>✓</span>}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isRcvd ? 'line-through' : 'none' }}>{row.name}</span>
+                    {row.assignee && <span style={{ marginLeft: 'auto', fontSize: 8.5, color: 'var(--ink-4)', flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.assignee}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
-        {canScrollRight && (
-          <button onClick={() => { scrollRef.current.scrollBy({ left: 300, behavior: 'smooth' }); }} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 40, width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-raised)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-2)', pointerEvents: 'all' }}>›</button>
-        )}
-      <div ref={scrollRef} onScroll={updateScrollBtns} style={{ border: '1px solid var(--border-subtle)', borderRadius: 8, overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
-        <div style={{ width: totalWidth, position: 'relative' }}>
+
+        {/* Scrollable area */}
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          {canScrollLeft && (
+            <button onClick={() => { scrollRef.current.scrollBy({ left: -300, behavior: 'smooth' }); }} style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 40, width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-raised)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-2)', pointerEvents: 'all' }}>‹</button>
+          )}
+          {canScrollRight && (
+            <button onClick={() => { scrollRef.current.scrollBy({ left: 300, behavior: 'smooth' }); }} style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 40, width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-raised)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--ink-2)', pointerEvents: 'all' }}>›</button>
+          )}
+        <div ref={scrollRef} onScroll={updateScrollBtns} style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'thin', scrollbarColor: 'var(--border) transparent' }}>
+          <div style={{ width: totalWidth, position: 'relative' }}>
 
           {/* TODAY full-height line */}
           <div style={{ position: 'absolute', left: todayX, top: 0, bottom: 0, width: 2, transform: 'translateX(-50%)', background: 'var(--sdc-blue)', opacity: 0.65, zIndex: 30, pointerEvents: 'none' }} />
@@ -377,7 +482,7 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
           </div>
 
           {/* Track area */}
-          <div style={{ position: 'relative', height: TY + 80, background: 'var(--bg-raised)' }}>
+          <div style={{ position: 'relative', height: viewMode === 'gantt' && ganttRows.length > 0 ? TY + (ganttRows.length * 28) + 40 : TY + 80, background: 'var(--bg-raised)' }}>
             {months.map((m, i) => m.even ? <div key={i} style={{ position: 'absolute', left: m.startX, width: m.width, top: 0, bottom: 0, background: 'rgba(0,0,0,0.012)' }} /> : null)}
             {months.slice(1).map((m, i) => <div key={i} style={{ position: 'absolute', left: m.startX, top: 0, bottom: 0, width: 1, background: 'var(--border-subtle)', opacity: 0.4 }} />)}
 
@@ -395,16 +500,76 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
             <div style={{ position: 'absolute', left: dayToX(buildStart), top: TY + 13, transform: 'translateX(-50%)', background: 'var(--threat)', color: '#fff', fontSize: 7, fontWeight: 800, letterSpacing: '0.06em', padding: '2px 5px', borderRadius: 3, whiteSpace: 'nowrap', zIndex: 20, pointerEvents: 'none' }}>BUILD START</div>
             {ship && <div style={{ position: 'absolute', left: dayToX(ship), top: TY + 13, transform: 'translateX(-50%)', background: 'var(--bg-sunken)', border: '1px solid var(--border)', color: 'var(--ink-3)', fontSize: 7, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 5px', borderRadius: 3, whiteSpace: 'nowrap', zIndex: 15, pointerEvents: 'none' }}>SHIP</div>}
 
-            {/* Milestone chips */}
-            {milestones.map(m => {
-              const x = dayToX(m.actualDate);
+            {/* Milestone chips — ribbon mode only */}
+            {viewMode === 'ribbon' && milestones.map(m => {
+              const isDragging = draggingMilestone?.id === m.id;
+              const x = isDragging ? draggingMilestone.x : dayToX(m.actualDate);
               const c = M[m.color] || 'var(--ink-4)';
 
               const labelTop = m.row === 0 ? 15 : 85;
               const stemH = TY - 5 - (labelTop + 22);
+
+              const handleMouseDown = (e) => {
+                if (!m.id.startsWith('ss-')) return;
+                e.stopPropagation();
+                e.preventDefault();
+                setHoveredItem(null);
+                wasDragged.current = true;
+
+                const startX = e.clientX;
+                const initialX = dayToX(m.actualDate);
+
+                const onMouseMove = (moveEvent) => {
+                  const dx = moveEvent.clientX - startX;
+                  setDraggingMilestone({ id: m.id, x: Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, initialX + dx)) });
+                };
+
+                const onMouseUp = async (upEvent) => {
+                  window.removeEventListener('mousemove', onMouseMove);
+                  window.removeEventListener('mouseup', onMouseUp);
+                  const dx = upEvent.clientX - startX;
+                  const finalX = Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, initialX + dx));
+                  setDraggingMilestone(null);
+
+                  if (Math.abs(dx) > 5) {
+                    const newDate = xToDay(finalX);
+                    const newDateStr = newDate.toISOString().split('T')[0];
+
+                    if (smartsheet?.sheetId && m.id.startsWith('ss-')) {
+                      const ogMilestone = smartsheet.milestones.find(sm => sm.name === m.label);
+                      if (ogMilestone && ogMilestone.id) {
+                        try {
+                          const res = await fetch(`/api/readiness/${job.id}/schedule/update`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              sheetId: smartsheet.sheetId,
+                              rowId: ogMilestone.id,
+                              startColId: smartsheet.startColId,
+                              finishColId: smartsheet.finishColId,
+                              finish: newDateStr
+                            })
+                          });
+                          if (res.ok) {
+                            window.location.reload();
+                          } else {
+                            alert("Failed to update Smartsheet.");
+                          }
+                        } catch(err) {
+                          alert("Error updating schedule: " + err.message);
+                        }
+                      }
+                    }
+                  }
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+              };
+
               return (
-                <div key={m.id} onMouseEnter={e => setHoveredItem({ type: 'milestone', data: m, date: m.actualDate, rect: e.currentTarget.getBoundingClientRect() })} onMouseLeave={() => setHoveredItem(null)} style={{ position: 'absolute', left: x, top: 0, bottom: 0, transform: 'translateX(-50%)', zIndex: 10, cursor: 'pointer' }}>
-                  <div style={{ position: 'absolute', top: labelTop, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-raised)', border: `1.5px solid ${c}`, borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 700, letterSpacing: '0.05em', color: c, textTransform: 'uppercase', whiteSpace: 'nowrap', boxShadow: '0 1px 4px rgba(0,0,0,0.09)' }}>
+                <div key={m.id} onMouseDown={handleMouseDown} onMouseEnter={e => !isDragging && setHoveredItem({ type: 'milestone', data: m, date: m.actualDate, rect: e.currentTarget.getBoundingClientRect() })} onMouseLeave={() => setHoveredItem(null)} style={{ position: 'absolute', left: x, top: 0, bottom: 0, transform: 'translateX(-50%)', zIndex: isDragging ? 50 : 10, cursor: m.id.startsWith('ss-') ? 'ew-resize' : 'pointer' }}>
+                  <div style={{ position: 'absolute', top: labelTop, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-raised)', border: `1.5px solid ${c}`, borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 700, letterSpacing: '0.05em', color: c, textTransform: 'uppercase', whiteSpace: 'nowrap', boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.09)' }}>
                     {m.label}
                   </div>
                   {stemH > 2 && <div style={{ position: 'absolute', top: labelTop + 22, left: '50%', transform: 'translateX(-50%)', width: 1, height: stemH, background: c, opacity: 0.28 }} />}
@@ -413,8 +578,8 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
               );
             })}
 
-            {/* Classified PO threat markers — color-coded by risk */}
-            {classifiedMarkers.map((m, i) => {
+            {/* Classified PO threat markers — ribbon mode only */}
+            {viewMode === 'ribbon' && classifiedMarkers.map((m, i) => {
               const { color } = CLS[m.cls];
               const size = 11;
               const isPinned = pinnedItem?.data === m;
@@ -433,8 +598,92 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
                 />
               );
             })}
+
+            {/* ── Gantt view: rows (milestone diamonds, summary bars, task bars) ── */}
+            {viewMode === 'gantt' && ganttRows.map((row, i) => {
+              const rowTop = TY + (i * 28);
+              const rowMid = rowTop + 14;
+              const band = i % 2 === 1 ? (
+                <div key={`band-${i}`} style={{ position: 'absolute', top: rowTop, left: 0, right: 0, height: 28, background: 'rgba(0,0,0,0.018)', pointerEvents: 'none' }} />
+              ) : null;
+
+              // ── MILESTONE row ──
+              if (row.type === 'milestone') {
+                const c = M[row.colorKey] || '#6b7280';
+                const x = row.date ? dayToX(row.date) : null;
+                if (!x) return band;
+                return (
+                  <React.Fragment key={`ms-${i}`}>
+                    {band}
+                    <div style={{ position: 'absolute', top: rowMid, left: 0, right: 0, height: 1, background: `${c}22`, pointerEvents: 'none', zIndex: 2 }} />
+                    <div style={{ position: 'absolute', top: 56, left: x, width: 1, height: rowMid - 56, background: `${c}20`, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 2 }} />
+                    <div
+                      onMouseEnter={e => setHoveredItem({ type: 'milestone', data: row, date: row.date, rect: e.currentTarget.getBoundingClientRect() })}
+                      onMouseLeave={() => setHoveredItem(null)}
+                      style={{ position: 'absolute', top: rowMid - 8, left: x, transform: 'translateX(-50%) rotate(45deg)', width: 16, height: 16, background: c, border: '2.5px solid var(--bg-raised)', borderRadius: 2, boxShadow: `0 0 0 1.5px ${c}, 0 2px 8px ${c}50`, zIndex: 15, cursor: 'pointer' }}
+                    />
+                    <div style={{ position: 'absolute', top: rowMid - 9, left: x + 14, fontSize: 8.5, fontWeight: 700, color: c, letterSpacing: '0.04em', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 16 }}>
+                      {fmt(row.date)}
+                    </div>
+                  </React.Fragment>
+                );
+              }
+
+              // ── SUMMARY row ──
+              if (row.type === 'summary') {
+                if (!row.start && !row.finish) return band;
+                const sx = dayToX(row.start || row.finish);
+                const fx = dayToX(row.finish || row.start);
+                const w  = Math.max(8, fx - sx);
+                return (
+                  <React.Fragment key={`sum-${i}`}>
+                    {band}
+                    <div style={{ position: 'absolute', top: rowMid - 5, left: sx, width: w, height: 10, background: 'var(--sdc-blue)', borderRadius: 2, opacity: 0.35, zIndex: 9 }} />
+                    <div style={{ position: 'absolute', top: rowMid - 5, left: sx, width: w, height: 10, background: 'transparent', border: '1.5px solid var(--sdc-blue)', borderRadius: 2, opacity: 0.6, zIndex: 10 }} />
+                    {/* End caps */}
+                    <div style={{ position: 'absolute', top: rowMid + 4, left: sx, width: 0, height: 0, borderLeft: '5px solid var(--sdc-blue)', borderTop: '5px solid transparent', opacity: 0.6, zIndex: 10 }} />
+                    <div style={{ position: 'absolute', top: rowMid + 4, left: fx, width: 0, height: 0, borderRight: '5px solid var(--sdc-blue)', borderTop: '5px solid transparent', transform: 'translateX(-100%)', opacity: 0.6, zIndex: 10 }} />
+                  </React.Fragment>
+                );
+              }
+
+              // ── TASK / PO row ──
+              const h = row.health || '';
+              const isRed      = h.toLowerCase().includes('red');
+              const isYellow   = h.toLowerCase().includes('yellow');
+              const isReceived = h === 'Received' || (row.percent || 0) >= 1;
+              const isCrit     = !!row.onCritical;
+              const c = isRed ? '#dc2626' : isYellow ? '#ca8a04' : isReceived ? '#16a34a' : 'var(--sdc-blue)';
+              const opacity    = isReceived ? 0.5 : 0.88;
+              const pct        = Math.round((row.percent || 0) * 100);
+              const startXPos  = dayToX(row.start || row.finish || buildStart);
+              const finishXPos = dayToX(row.finish || row.start || today);
+              const barWidth   = Math.max(4, finishXPos - startXPos - 10);
+
+              return (
+                <React.Fragment key={`task-${i}`}>
+                  {band}
+                  <div
+                    title={`${row.name}${row.assignee ? ' · ' + row.assignee : ''} · ${pct}%${row.predecessorDisplay ? ' · Pred: ' + row.predecessorDisplay : ''}`}
+                    style={{ position: 'absolute', top: rowTop + 7, left: startXPos, width: barWidth, height: 14, background: c, borderRadius: '3px 0 0 3px', opacity, cursor: 'default', zIndex: 10, overflow: 'hidden', boxShadow: isCrit ? `0 0 0 1.5px #dc2626, 0 0 0 2.5px #dc262630` : '0 1px 3px rgba(0,0,0,0.1)' }}
+                  >
+                    {pct > 0 && pct < 100 && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: 'rgba(255,255,255,0.28)', borderRadius: '3px 0 0 3px' }} />}
+                    {barWidth > 40 && (
+                      <span style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', fontSize: 7.5, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', pointerEvents: 'none' }}>
+                        {isReceived ? '✓' : `${pct}%`}
+                      </span>
+                    )}
+                  </div>
+                  {/* Diamond at due date */}
+                  <div
+                    style={{ position: 'absolute', top: rowMid - 6, left: finishXPos, transform: 'translateX(-50%) rotate(45deg)', width: 12, height: 12, background: isReceived ? c : 'var(--bg-raised)', border: `2px solid ${c}`, borderRadius: 2, boxShadow: isCrit ? `0 0 0 1px #dc262670` : `0 0 0 1px ${c}50`, zIndex: 14, opacity }}
+                  />
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
+      </div>
       </div>
       </div>
 

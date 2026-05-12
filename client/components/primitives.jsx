@@ -37,6 +37,7 @@ const IconMinus        = (p) => <Icon {...p} d={<path d="M3 8h10"/>} />;
 const IconArrowRight   = (p) => <Icon {...p} d={<><path d="M3 8h10M9 4l4 4-4 4"/></>} />;
 const IconCalendar     = (p) => <Icon {...p} d={<><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></>} />;
 const IconWrench       = (p) => <Icon {...p} d={<path d="M11.5 1.5a3.5 3.5 0 0 0-4.6 4.4l-5 5a1.5 1.5 0 0 0 2.1 2.1l5-5a3.5 3.5 0 0 0 4.4-4.6L11 4l-1.5-1.5z"/>} />;
+const IconExternal     = (p) => <Icon {...p} d={<><path d="M11 2h3v3M14 2l-8 8"/><path d="M5 5H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-2"/></>} />;
 
 // ---- Status badge ----
 function StatusBadge({ status }) {
@@ -111,6 +112,6 @@ Object.assign(window, {
   Icon, IconSearch, IconChevronRight, IconChevronDown, IconCaretRight, IconCaretDown,
   IconLayers, IconBox, IconAlert, IconClock, IconDollar, IconMail, IconTruck, IconUser,
   IconCmd, IconExport, IconFilter, IconCopy, IconRefresh, IconSparkle, IconCheck,
-  IconCircleX, IconX, IconSlash, IconLink, IconPlus, IconMinus, IconArrowRight, IconCalendar, IconWrench,
+  IconCircleX, IconX, IconSlash, IconLink, IconPlus, IconMinus, IconArrowRight, IconCalendar, IconWrench, IconExternal,
   StatusBadge, HealthRing, VendorAvatar,
 });

@@ -37,16 +37,8 @@ function CostTab({ data }) {
       {/* Header section */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', margin: 0, letterSpacing: '-0.02em' }}>Project Costs</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--fg-0)', margin: 0, letterSpacing: '-0.02em' }}>Financials</h1>
           <div style={{ fontSize: 13, color: 'var(--fg-2)', marginTop: 4 }}>Real-time material spend & labor against estimate — live from MS SQL ERP</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}>
-            <window.IconExport size={14} /> Export
-          </button>
-          <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12 }}>
-            <window.IconRefresh size={14} /> Sync ERP
-          </button>
         </div>
       </div>
 
