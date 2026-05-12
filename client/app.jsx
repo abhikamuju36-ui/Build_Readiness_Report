@@ -202,8 +202,11 @@ function App() {
     setData(null);
 
     Promise.all([
-      fetch(`/api/readiness/${jobId}`).then(res => {
-        if (!res.ok) throw new Error('Project not found — check the job number and try again.');
+      fetch(`/api/readiness/${jobId}`).then(async res => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Server error ${res.status} — check the job number and try again.`);
+        }
         return res.json();
       }),
       fetch(`/api/emails/${jobId}`).then(res => res.ok ? res.json() : { emails: [] })
