@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const eto = require('../services/eto');
 const demo = require('../services/demoData');
-const { getBuildDates, updateTaskDates } = require('../services/smartsheet');
+const { getBuildDates } = require('../services/smartsheet');
 const { buildTree, buildReadinessSummary, buildPoActionList, buildPoIndex, findNoPoParts } = require('../lib/bomTree');
 
 function db() { return demo.isDemoMode() ? demo : eto; }
@@ -92,24 +92,5 @@ router.get('/:projectId', async (req, res) => {
   }
 });
 
-// POST /api/readiness/:projectId/schedule/update — update smartsheet task dates
-router.post('/:projectId/schedule/update', async (req, res) => {
-  try {
-    const { sheetId, rowId, startColId, finishColId, start, finish } = req.body;
-    if (!sheetId || !rowId) {
-      return res.status(400).json({ error: 'Missing required parameters (sheetId, rowId)' });
-    }
-
-    const result = await updateTaskDates(sheetId, rowId, startColId, finishColId, start, finish);
-    if (!result) {
-      return res.status(500).json({ error: 'Failed to update Smartsheet. Check API connection.' });
-    }
-    
-    res.json({ success: true, result });
-  } catch (err) {
-    console.error('Error updating schedule:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 module.exports = router;

@@ -21,19 +21,6 @@ async function smartsheetFetch(path) {
   finally { clearTimeout(timer); }
 }
 
-async function smartsheetUpdate(path, body) {
-  const apiKey = process.env.SMARTSHEET_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) { console.error(`Smartsheet update error: ${res.status}`); return null; }
-    return res.json();
-  } catch (err) { console.error('Smartsheet network error:', err); return null; }
-}
 
 async function findScheduleSheet(projectId) {
   const data = await smartsheetFetch(`/search?query=${projectId}`);
@@ -175,12 +162,4 @@ async function getBuildDates(projectId) {
   };
 }
 
-async function updateTaskDates(sheetId, rowId, startColId, finishColId, startVal, finishVal) {
-  const cells = [];
-  if (startColId && startVal) cells.push({ columnId: startColId, value: startVal });
-  if (finishColId && finishVal) cells.push({ columnId: finishColId, value: finishVal });
-  if (!cells.length) return null;
-  return await smartsheetUpdate(`/sheets/${sheetId}/rows`, [{ id: rowId, cells }]);
-}
-
-module.exports = { getBuildDates, updateTaskDates };
+module.exports = { getBuildDates };

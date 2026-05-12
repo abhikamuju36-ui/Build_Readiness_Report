@@ -197,9 +197,7 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
   const EDGE_PAD = 10;
   const dayToX = d => Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, ((+new Date(d) - +rangeStart) / 86400000) * DAY_W));
   const todayX = dayToX(today);
-  const xToDay = x => new Date(+rangeStart + (x / DAY_W) * 86400000);
 
-  const [draggingMilestone, setDraggingMilestone] = useState(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -502,74 +500,15 @@ function TimelineRibbon({ job, poActions, smartsheet, onDrillDown }) {
 
             {/* Milestone chips — ribbon mode only */}
             {viewMode === 'ribbon' && milestones.map(m => {
-              const isDragging = draggingMilestone?.id === m.id;
-              const x = isDragging ? draggingMilestone.x : dayToX(m.actualDate);
+              const x = dayToX(m.actualDate);
               const c = M[m.color] || 'var(--ink-4)';
 
               const labelTop = m.row === 0 ? 15 : 85;
               const stemH = TY - 5 - (labelTop + 22);
 
-              const handleMouseDown = (e) => {
-                if (!m.id.startsWith('ss-')) return;
-                e.stopPropagation();
-                e.preventDefault();
-                setHoveredItem(null);
-                wasDragged.current = true;
-
-                const startX = e.clientX;
-                const initialX = dayToX(m.actualDate);
-
-                const onMouseMove = (moveEvent) => {
-                  const dx = moveEvent.clientX - startX;
-                  setDraggingMilestone({ id: m.id, x: Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, initialX + dx)) });
-                };
-
-                const onMouseUp = async (upEvent) => {
-                  window.removeEventListener('mousemove', onMouseMove);
-                  window.removeEventListener('mouseup', onMouseUp);
-                  const dx = upEvent.clientX - startX;
-                  const finalX = Math.max(EDGE_PAD, Math.min(totalWidth - EDGE_PAD, initialX + dx));
-                  setDraggingMilestone(null);
-
-                  if (Math.abs(dx) > 5) {
-                    const newDate = xToDay(finalX);
-                    const newDateStr = newDate.toISOString().split('T')[0];
-
-                    if (smartsheet?.sheetId && m.id.startsWith('ss-')) {
-                      const ogMilestone = smartsheet.milestones.find(sm => sm.name === m.label);
-                      if (ogMilestone && ogMilestone.id) {
-                        try {
-                          const res = await fetch(`/api/readiness/${job.id}/schedule/update`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              sheetId: smartsheet.sheetId,
-                              rowId: ogMilestone.id,
-                              startColId: smartsheet.startColId,
-                              finishColId: smartsheet.finishColId,
-                              finish: newDateStr
-                            })
-                          });
-                          if (res.ok) {
-                            window.location.reload();
-                          } else {
-                            alert("Failed to update Smartsheet.");
-                          }
-                        } catch(err) {
-                          alert("Error updating schedule: " + err.message);
-                        }
-                      }
-                    }
-                  }
-                };
-
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
-              };
-
               return (
-                <div key={m.id} onMouseDown={handleMouseDown} onMouseEnter={e => !isDragging && setHoveredItem({ type: 'milestone', data: m, date: m.actualDate, rect: e.currentTarget.getBoundingClientRect() })} onMouseLeave={() => setHoveredItem(null)} style={{ position: 'absolute', left: x, top: 0, bottom: 0, transform: 'translateX(-50%)', zIndex: isDragging ? 50 : 10, cursor: m.id.startsWith('ss-') ? 'ew-resize' : 'pointer' }}>
-                  <div style={{ position: 'absolute', top: labelTop, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-raised)', border: `1.5px solid ${c}`, borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 700, letterSpacing: '0.05em', color: c, textTransform: 'uppercase', whiteSpace: 'nowrap', boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.09)' }}>
+                <div key={m.id} onMouseEnter={e => setHoveredItem({ type: 'milestone', data: m, date: m.actualDate, rect: e.currentTarget.getBoundingClientRect() })} onMouseLeave={() => setHoveredItem(null)} style={{ position: 'absolute', left: x, top: 0, bottom: 0, transform: 'translateX(-50%)', zIndex: 10, cursor: 'pointer' }}>
+                  <div style={{ position: 'absolute', top: labelTop, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-raised)', border: `1.5px solid ${c}`, borderRadius: 4, padding: '2px 7px', fontSize: 8, fontWeight: 700, letterSpacing: '0.05em', color: c, textTransform: 'uppercase', whiteSpace: 'nowrap', boxShadow: '0 1px 4px rgba(0,0,0,0.09)' }}>
                     {m.label}
                   </div>
                   {stemH > 2 && <div style={{ position: 'absolute', top: labelTop + 22, left: '50%', transform: 'translateX(-50%)', width: 1, height: stemH, background: c, opacity: 0.28 }} />}

@@ -207,32 +207,6 @@ function ReadinessTab({ data, onDrillDown, highlightPoIds = [], onClearHighlight
 
       <RiskPartsPanel nopo={data.nopo} poActions={data.poActions} />
 
-      {/* Smartsheet Milestones — compact horizontal strip */}
-      {data.buildDates && data.buildDates.milestones && data.buildDates.milestones.length > 0 && (
-        <div style={{ border: '1px solid var(--sdc-blue-soft)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)', marginBottom: 12 }}>
-          <div style={{ padding: '7px 14px', background: 'var(--sdc-blue-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <window.IconCalendar size={12} />
-            <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--sdc-blue-ink)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Schedule Milestones</span>
-            {data.buildDates.permalink && (
-              <a href={data.buildDates.permalink} target="_blank" style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--sdc-blue-ink)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                OPEN <window.IconExternal size={10} />
-              </a>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, padding: '8px 14px' }}>
-            {data.buildDates.milestones.map((m, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderRight: i < data.buildDates.milestones.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{m.name}</span>
-                <div style={{ width: 60, height: 4, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ width: `${m.percent * 100}%`, height: '100%', background: m.health.toLowerCase() === 'red' ? 'var(--threat)' : m.health.toLowerCase() === 'yellow' ? 'var(--pending)' : 'var(--ready)' }} />
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: m.health.toLowerCase() === 'red' ? 'var(--threat-ink)' : 'var(--ink-3)' }}>{Math.round(m.percent * 100)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Vendor Cards — always shown at bottom */}
       <div style={{ marginTop: 4 }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 10 }}>Vendor Status</div>
