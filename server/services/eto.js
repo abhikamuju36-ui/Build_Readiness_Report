@@ -133,7 +133,13 @@ async function getPoDetails(projectId) {
           SELECT SUM(rl.QtyReceived)
           FROM tblReceiverLog rl
           WHERE rl.PurchaseDetailID = pod.PurchaseDetailID
-        ), 0) AS ReceivedQty
+        ), 0) AS ReceivedQty,
+        (
+          SELECT TOP 1 rl2.[Date]
+          FROM tblReceiverLog rl2
+          WHERE rl2.PurchaseDetailID = pod.PurchaseDetailID
+          ORDER BY rl2.[Date] DESC
+        ) AS LastReceivedDate
       FROM tblPurchaseOrderDetails pod
       JOIN tblPurchaseOrderHeader poh ON pod.PurchaseOrderID = poh.PurchaseOrderID
       JOIN tblCompany c              ON poh.PurchaseSupplierID = c.CompanyID

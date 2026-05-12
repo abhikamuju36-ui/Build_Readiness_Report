@@ -198,72 +198,8 @@ function RiskPartsPanel({ nopo, poActions }) {
   );
 }
 
-function statusColor(s) {
-  if (s === 'ready' || s === 'received') return 'var(--ready)';
-  if (s === 'close' || s === 'ordered') return 'var(--pending)';
-  if (s === 'blocked' || s === 'threat' || s === 'noPO' || s === 'no_po') return 'var(--threat)';
-  return 'var(--ink-4)';
-}
-
-function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jobId, onDrillDown }) {
-  const { job, readiness } = data;
-  const [expandAction, setExpandAction] = useState({ type: null, version: 0 });
-
-  // Calculate accurate counts dynamically
-  const stats = useMemo(() => {
-    let ready = 0, close = 0, blocked = 0;
-    let totalParts = 0, receivedParts = 0;
-    const specCounts = {};
-
-    readiness.forEach(s => {
-      specCounts[s.spec] = s.lines || 0;
-      s.assemblies.forEach(a => {
-        const pct = a.pct || a.stats?.pct || 0;
-        if (pct >= 85) ready++;
-        else if (pct >= 60) close++;
-        else blocked++;
-
-        totalParts += (a.total || a.stats?.total || 0);
-        receivedParts += (a.ready || a.stats?.received || 0);
-      });
-    });
-    // Use globally-deduplicated count from job.kpis — avoids double-counting shared parts
-    const noPO = data.job.kpis.noPO;
-    return { ready, close, blocked, noPO, specCounts, totalParts, receivedParts };
-  }, [readiness, data.job.kpis.noPO]);
-
-  const filteredSpecs = useMemo(() => {
-    const q = query.toLowerCase();
-    const isSpecSearch = q.startsWith('spec ');
-    const isNoPoSearch = q === 'no po';
-    const specNum = isSpecSearch ? q.replace('spec ', '').trim() : null;
-
-    return readiness.map(s => {
-      const specMatch = isSpecSearch && (String(s.spec).toLowerCase() === specNum || s.title.toLowerCase().includes(q));
-
-      return {
-        ...s,
-        assemblies: s.assemblies.filter(a => {
-          const pct = a.pct || a.stats?.pct || 0;
-          const status = (pct >= 85) ? 'ready' : (pct >= 60) ? 'close' : 'blocked';
-          const matchesStatus = statusFilter === 'all' || status === statusFilter || (statusFilter === 'noPO' && (a.noPo || a.stats?.noPO) > 0);
-
-          if (!matchesStatus) return false;
-          if (!query) return true;
-          if (specMatch) return true;
-          if (isNoPoSearch && matchesStatus) return true; // Show all if no po status matched
-
-          return (a.name || '').toLowerCase().includes(q) ||
-            (a.desc || '').toLowerCase().includes(q) ||
-            (a.code || '').toLowerCase().includes(q);
-        }),
-      };
-    }).filter(s => s.assemblies.length > 0);
-  }, [readiness, statusFilter, query]);
-
-
-  const handleExpandAll = () => setExpandAction({ type: 'expand', version: expandAction.version + 1 });
-  const handleCollapseAll = () => setExpandAction({ type: 'collapse', version: expandAction.version + 1 });
+function ReadinessTab({ data, onDrillDown }) {
+  const { job } = data;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -272,127 +208,22 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
       <RiskPartsPanel readiness={data.readiness} nopo={data.nopo} poActions={data.poActions} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="search" style={{ flex: 1 }}>
-              <window.IconSearch size={14} />
-              <input
-                placeholder="Search parts, assemblies, suppliers, vendors…"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-              />
-              {query && (
-                <button
-                  onClick={() => setQuery('')}
-                  style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--ink-4)', display: 'flex', alignItems: 'center' }}
-                >
-                  <window.IconX size={14} />
-                </button>
-              )}
-              <window.IconFilter size={12} style={{ color: 'var(--ink-4)', cursor: 'pointer' }} />
-              <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
-              <span className="kbd">⌘K</span>
-            </div>
-            <div style={{ display: "flex", gap: 4, background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: "var(--r-md)", padding: 3 }}>
-              {[
-                { id: "all", label: "All" },
-                { id: "ready", label: "Ready", dot: "ready" },
-                { id: "close", label: "Close", dot: "pending" },
-                { id: "blocked", label: "Blocked", dot: "threat" },
-              ].map(f => (
-                <button key={f.id} onClick={() => setStatusFilter(f.id)} style={{
-                  padding: "4px 10px",
-                  fontSize: "var(--t-sm)",
-                  fontWeight: 500,
-                  borderRadius: 4,
-                  background: statusFilter === f.id ? "var(--bg-raised)" : "transparent",
-                  color: statusFilter === f.id ? "var(--ink)" : "var(--ink-3)",
-                  boxShadow: statusFilter === f.id ? "var(--shadow-sm)" : "none",
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                }}>
-                  {f.dot && <span className={`dot-led ${f.dot}`} style={{ margin: 0 }} />}
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Sticky Schedule Bar Overlay */}
-          <div style={{
-            position: "sticky", top: 0, zIndex: 100,
-            background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
-            border: "1px solid var(--border)", borderBottom: "2px solid var(--border-strong)",
-            borderRadius: "var(--r-md)", padding: "10px 18px",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            boxShadow: "var(--shadow-md)", margin: "0 0 4px 0"
-          }}>
-            <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Build Start</span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{job.buildStart ? new Date(job.buildStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ship Date</span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{job.shipDate ? new Date(job.shipDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}</span>
-              </div>
-              <div style={{ width: 1, height: 24, background: "var(--border)" }} />
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", letterSpacing: "0.05em", textTransform: "uppercase" }}>Readiness</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 100, height: 6, background: "var(--bg-sunken)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%`, height: "100%", background: "var(--ready)" }} />
-                  </div>
-                  <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ready-ink)" }}>{Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%</span>
-                </div>
+
+          <div style={{ marginTop: 24 }}>
+            <div style={{ padding: '0 0 12px 4px', borderBottom: '1px solid var(--border-soft)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--fg-0)' }}>Supplier Readiness & POs</h2>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <window.StatusBadge status="READY" />
+                <window.StatusBadge status="PAST DUE" />
               </div>
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
-                <window.IconClock size={12} style={{ verticalAlign: 'middle', marginRight: 4, marginTop: -2 }} />
-                {job.buildStart ? `${Math.round((new Date(job.buildStart) - new Date()) / 86400000)} days to build` : 'Build date TBD'}
-              </span>
-              <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
-              <button onClick={handleExpandAll} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-sunken)', color: 'var(--ink-2)', cursor: 'pointer' }}>
-                Expand All
-              </button>
-              <button onClick={handleCollapseAll} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-sunken)', color: 'var(--ink-2)', cursor: 'pointer' }}>
-                Collapse All
-              </button>
-            </div>
-          </div>
-
-          <div className="card" style={{ overflow: "hidden" }}>
-            {filteredSpecs.map(spec => (
-              <div key={spec.spec} id={`spec-${spec.spec}`}>
-                <div style={{
-                  padding: "8px 14px",
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 12,
-                  background: "var(--bg-sunken)",
-                  borderBottom: "1px solid var(--border-subtle)"
-                }}>
-                  <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, letterSpacing: "-0.01em", color: "var(--ink)" }}>
-                    Spec {spec.spec} — {spec.title}
-                  </h2>
-                  <span className="meta-line" style={{ fontSize: 10 }}>{spec.lines} BOM lines · {spec.assemblies.length} assemblies</span>
-                </div>
-
-                {spec.assemblies.map((a, i) => (
-                  <AssemblyRow
-                    key={a.name}
-                    a={a}
-                    jobId={jobId}
-                    isLast={i === spec.assemblies.length - 1}
-                    expandAction={expandAction}
-                  />
-                ))}
-              </div>
-            ))}
-            {filteredSpecs.length === 0 && (
-              <div style={{ padding: 60, textAlign: 'center', color: 'var(--ink-4)' }}>No matches.</div>
-            )}
+            <window.PoTracker 
+              poActions={data.poActions} 
+              query={query} 
+              highlightPoIds={[]} 
+              onClearHighlight={() => {}} 
+            />
           </div>
         </div>
 
@@ -422,7 +253,6 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
           </div>
         )}
       </div>
-    </div>
   );
 }
 
@@ -720,19 +550,116 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
   );
 }
 
-function Stat({ label, value, accent, mono }) {
-  const colors = {
-    ready: "var(--ready-ink)",
-    blue: "var(--sdc-blue-ink)",
-    threat: "var(--threat-ink)",
-    neutral: "var(--ink-3)"
-  };
+function AssemblyList({ data }) {
+  const { jobId, readiness, job } = data;
+  const [query, setQuery] = useState('');
+  const [expandAction, setExpandAction] = useState({ type: null, version: 0 });
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const stats = useMemo(() => {
+    let totalParts = 0, receivedParts = 0;
+    readiness.forEach(s => s.assemblies.forEach(a => {
+      totalParts += (a.total || a.stats?.total || 0);
+      receivedParts += (a.ready || a.stats?.received || 0);
+    }));
+    return { totalParts, receivedParts };
+  }, [readiness]);
+
+  const filteredSpecs = useMemo(() => {
+    const q = query.toLowerCase();
+    return readiness.map(s => ({
+      ...s,
+      assemblies: s.assemblies.filter(a => {
+        const pct = a.pct || a.stats?.pct || 0;
+        const status = (pct >= 85) ? 'ready' : (pct >= 60) ? 'close' : 'blocked';
+        const matchesStatus = statusFilter === 'all' || status === statusFilter;
+        if (!matchesStatus) return false;
+        if (!query) return true;
+        return (a.name || '').toLowerCase().includes(q) || 
+               (a.desc || '').toLowerCase().includes(q) ||
+               (a.code || '').toLowerCase().includes(q);
+      }),
+    })).filter(s => s.assemblies.length > 0);
+  }, [readiness, statusFilter, query]);
+
+  const handleExpandAll = () => setExpandAction({ type: 'expand', version: expandAction.version + 1 });
+  const handleCollapseAll = () => setExpandAction({ type: 'collapse', version: expandAction.version + 1 });
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, minWidth: 60 }}>
-      <span className={mono ? "mono" : ""} style={{ fontSize: "var(--t-md)", fontWeight: 600, color: accent ? colors[accent] : "var(--ink)" }}>{value}</span>
-      <span style={{ fontSize: 9, color: "var(--ink-4)", letterSpacing: 0.04, textTransform: "uppercase", marginTop: 3, fontWeight: 600 }}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 20px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+        <div className="search" style={{ flex: 1 }}>
+          <window.IconSearch size={14} />
+          <input
+            placeholder="Search parts, assemblies, suppliers…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          {query && (
+            <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--ink-4)' }}>
+              <window.IconX size={14} />
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 4, background: "var(--bg-sunken)", border: "1px solid var(--border)", borderRadius: 6, padding: 3 }}>
+          {['all', 'ready', 'close', 'blocked'].map(id => (
+            <button key={id} onClick={() => setStatusFilter(id)} style={{
+              padding: "4px 10px", fontSize: 11, fontWeight: 500, borderRadius: 4,
+              background: statusFilter === id ? "var(--bg-raised)" : "transparent",
+              color: statusFilter === id ? "var(--ink)" : "var(--ink-3)",
+              display: "inline-flex", alignItems: "center", gap: 6
+            }}>
+              {id !== 'all' && <span className={`dot-led ${id === 'ready' ? 'ready' : id === 'close' ? 'pending' : 'threat'}`} style={{ margin: 0 }} />}
+              {id.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        position: "sticky", top: 0, zIndex: 10,
+        background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
+        border: "1px solid var(--border)", borderBottom: "2px solid var(--border-strong)",
+        borderRadius: 8, padding: "10px 18px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        boxShadow: "var(--shadow-md)"
+      }}>
+        <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", textTransform: "uppercase" }}>Build Start</span>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--threat-ink)" }}>{job.buildStart ? new Date(job.buildStart).toLocaleDateString() : 'TBD'}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-4)", textTransform: "uppercase" }}>Readiness</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 100, height: 6, background: "var(--bg-sunken)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%`, height: "100%", background: "var(--ready)" }} />
+              </div>
+              <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ready-ink)" }}>{Math.round((stats.receivedParts / (stats.totalParts || 1)) * 100)}%</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-secondary btn-sm" onClick={handleExpandAll}>Expand All</button>
+          <button className="btn-secondary btn-sm" onClick={handleCollapseAll}>Collapse All</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ overflow: "hidden" }}>
+        {filteredSpecs.map(spec => (
+          <div key={spec.spec}>
+            <div style={{ padding: "8px 14px", background: "var(--bg-sunken)", borderBottom: "1px solid var(--border-subtle)" }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Spec {spec.spec} — {spec.title}</span>
+            </div>
+            {spec.assemblies.map((a, i) => (
+              <AssemblyRow key={a.name} a={a} jobId={jobId} isLast={i === spec.assemblies.length - 1} expandAction={expandAction} />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
+window.AssemblyList = AssemblyList;
 window.ReadinessTab = ReadinessTab;

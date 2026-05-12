@@ -62,6 +62,17 @@ router.get('/:projectId', async (req, res) => {
 
     const specReports = specReportsRaw.filter(Boolean);
 
+    // Global dedup of noPoParts across specs — a part appearing in both spec 10 and spec 30
+    // should only be reported once (first occurrence wins).
+    const seenNoPo = new Set();
+    specReports.forEach(s => {
+      s.noPoParts = s.noPoParts.filter(p => {
+        if (seenNoPo.has(p.id)) return false;
+        seenNoPo.add(p.id);
+        return true;
+      });
+    });
+
     // PO action list
     const poActions = buildPoActionList(poRows);
 

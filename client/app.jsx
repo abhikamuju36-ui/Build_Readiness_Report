@@ -2,7 +2,7 @@
 const { useState, useEffect, useRef } = React;
 
 // Cache versioning — bump this whenever the mapped data shape changes
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 (function purgeStaleCaches() {
   try {
     for (const key of Object.keys(localStorage)) {
@@ -381,7 +381,7 @@ function App() {
           <button className={`rail-item ${statusFilter === 'close' ? 'active' : ''}`} onClick={() => { setTab('readiness'); setStatusFilter(statusFilter === 'close' ? 'all' : 'close'); setQuery(''); }}>
             <span style={{ display: 'flex', alignItems: 'center' }}>
               <span className="ico"><span className="dot-led pending" style={{margin:0}}/></span>
-              Close (80–99%)
+              Close (60–84%)
             </span>
             <span className="count">{data.job.kpis.close}</span>
           </button>
@@ -443,7 +443,7 @@ function App() {
 
       <main className="main">
         <div className="main-inner">
-          {tab === 'readiness' && <window.ReadinessTab data={data} query={query} setQuery={setQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} jobId={jobId} onDrillDown={ids => { setHighlightPoIds(ids); setTab('po'); }}/>}
+          {tab === 'readiness' && <window.ReadinessTab data={data} onDrillDown={ids => { setHighlightPoIds(ids); setTab('po'); }}/>}
           {tab === 'po' && <window.PoTab data={data} highlightPoIds={highlightPoIds} onClearHighlight={() => setHighlightPoIds([])}/>}
           {tab === 'cost' && <window.CostTab data={data}/>}
         </div>

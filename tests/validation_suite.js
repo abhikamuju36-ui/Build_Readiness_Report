@@ -144,6 +144,16 @@ function runPipeline(projectId) {
     };
   }).filter(Boolean);
 
+  // Mirror the route: globally deduplicate noPoParts across specs
+  const seenNoPo = new Set();
+  specReports.forEach(s => {
+    s.noPoParts = s.noPoParts.filter(p => {
+      if (seenNoPo.has(p.id)) return false;
+      seenNoPo.add(p.id);
+      return true;
+    });
+  });
+
   return {
     project, specs: specReports, poActions,
     buildDates: { buildStart: null, buildComplete: null },

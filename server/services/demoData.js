@@ -77,11 +77,25 @@ module.exports = {
   },
 
   getBomRows(projectId, specId) {
-    return loadJson(`bom_${projectId}_${specId}.json`) || [];
+    const rows = loadJson(`bom_${projectId}_${specId}.json`) || [];
+    return rows.map(r => ({
+      ...r,
+      // If received, mock a date 2 days before requirement
+      LastReceivedDate: (r.ReceivedQty >= r.ItemQty && r.ReceivedQty > 0)
+        ? new Date(new Date(r.RequiredDate || Date.now()).getTime() - 172800000).toISOString()
+        : null
+    }));
   },
 
   getPoDetails(projectId) {
-    return loadJson(`po_${projectId}.json`) || [];
+    const rows = loadJson(`po_${projectId}.json`) || [];
+    return rows.map(r => ({
+      ...r,
+      // If received, mock a date 2 days after PO date
+      LastReceivedDate: (r.ReceivedQty >= r.PurchaseQty && r.ReceivedQty > 0)
+        ? new Date(new Date(r.PurchaseDate || Date.now()).getTime() + 172800000).toISOString()
+        : null
+    }));
   },
 
   getProjectCosting(projectId) {

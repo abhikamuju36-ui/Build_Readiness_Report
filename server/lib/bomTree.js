@@ -138,6 +138,7 @@ function buildPoIndex(poRows) {
       qty: row.PurchaseQty,
       received: row.ReceivedQty,
       price: row.PurchasePrice,
+      receivedDate: row.LastReceivedDate || null,
     });
   });
   return idx;
