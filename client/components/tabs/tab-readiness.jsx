@@ -511,9 +511,9 @@ function AssemblyRow({ a, jobId, isLast, depth = 0, expandAction }) {
         </div>
 
         <span className="mono" style={{
-          fontSize: 11, fontWeight: 800, color: "var(--ink)", padding: "2px 6px",
-          background: "var(--bg-raised)", border: "1px solid var(--border-strong)",
-          boxShadow: "var(--shadow-sm)", borderRadius: 4, whiteSpace: 'nowrap',
+          fontSize: 11, fontWeight: 700, color: "var(--sdc-blue)", padding: "2px 8px",
+          background: "var(--sdc-blue-soft)", border: "1px solid var(--sdc-blue-border,rgba(37,99,235,0.25))",
+          borderRadius: 4, whiteSpace: 'nowrap',
         }}>{a.code || a.pn}</span>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
