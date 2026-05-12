@@ -13,6 +13,18 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
   const lateCount = (data.poActions?.critical?.length || 0);
   const totalPos = (data.poActions?.critical?.length || 0) + (data.poActions?.warning?.length || 0) + (data.poActions?.onTrack?.length || 0) + (data.poActions?.delivered?.length || 0);
 
+  const overduePartCount = useMemo(() => {
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    let n = 0;
+    [...(data.poActions?.critical || []), ...(data.poActions?.warning || [])].forEach(entry => {
+      entry.po.parts.forEach(p => {
+        if (p.received >= p.qty) return;
+        if (p.dueDate && new Date(p.dueDate) <= todayEnd) n++;
+      });
+    });
+    return n;
+  }, [data.poActions]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%', overflow: 'hidden' }}>
       {/* Header section */}
@@ -53,9 +65,10 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
       {/* Sub-tabs */}
       <div style={{ display: 'flex', gap: 32, borderBottom: '1px solid var(--border-soft)', paddingBottom: 0 }}>
         {[
-          { id: 'pos',    label: 'PO Tracker',   count: totalPos },
-          { id: 'parts',  label: 'All Parts',  count: data.job.kpis.totalParts || data.readiness.reduce((s, spec) => s + spec.assemblies.reduce((a, assy) => a + (assy.node?.parts?.length || 0), 0), 0) },
-          { id: 'emails', label: 'Draft Emails', count: data.emails?.length || 0 },
+          { id: 'pos',     label: 'PO Tracker',   count: totalPos },
+          { id: 'overdue', label: 'Due Today',     count: overduePartCount, alert: overduePartCount > 0 },
+          { id: 'parts',   label: 'All Parts',     count: data.readiness.reduce((s, spec) => s + (spec.lines || 0), 0) },
+          { id: 'emails',  label: 'Draft Emails',  count: data.emails?.length || 0 },
         ].map(v => (
           <button key={v.id} onClick={() => setView(v.id)} style={{
             padding: '12px 4px', fontSize: 13, fontWeight: view === v.id ? 600 : 500,
@@ -65,8 +78,9 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
             transition: 'all 0.2s', marginBottom: -1
           }}>
             {v.label} <span style={{
-              fontSize: 10, background: view === v.id ? 'var(--sdc-blue-soft)' : 'var(--bg-3)',
-              color: view === v.id ? 'var(--sdc-blue)' : 'var(--fg-3)',
+              fontSize: 10,
+              background: view === v.id ? (v.alert ? 'rgba(220,38,38,0.12)' : 'var(--sdc-blue-soft)') : (v.alert ? 'rgba(220,38,38,0.08)' : 'var(--bg-3)'),
+              color: view === v.id ? (v.alert ? '#dc2626' : 'var(--sdc-blue)') : (v.alert ? '#dc2626' : 'var(--fg-3)'),
               padding: '1px 6px', borderRadius: 4, fontWeight: 600
             }}>{v.count}</span>
           </button>
@@ -77,9 +91,10 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
 
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <div className="panel" style={{ height: '100%', overflow: 'auto', background: 'var(--bg-1)', border: '1px solid var(--border-soft)' }}>
-          {view === 'parts' && <PartsFlatView parts={data.readiness.flatMap(s => s.assemblies.flatMap(a => (a.node?.parts || []).map(p => ({ ...p, spec: s.spec, assemblyDesc: a.desc || a.code }))))} query={query} job={data.job}/>}
-          {view === 'pos' && <PoTracker poActions={data.poActions} query={query} highlightPoIds={highlightPoIds} onClearHighlight={onClearHighlight}/>}
-          {view === 'emails' && <EmailsPanel emails={data.emails || []} job={data.job}/>}
+          {view === 'parts'   && <PartsFlatView parts={data.readiness.flatMap(s => s.assemblies.flatMap(a => (a.node?.parts || []).map(p => ({ ...p, spec: s.spec, assemblyDesc: a.desc || a.code }))))} query={query} job={data.job}/>}
+          {view === 'pos'     && <PoTracker poActions={data.poActions} query={query} highlightPoIds={highlightPoIds} onClearHighlight={onClearHighlight}/>}
+          {view === 'overdue' && <OverduePartsView poActions={data.poActions}/>}
+          {view === 'emails'  && <EmailsPanel emails={data.emails || []} job={data.job}/>}
         </div>
       </div>
     </div>
@@ -374,7 +389,7 @@ function PoTracker({ poActions, query, highlightPoIds = [], onClearHighlight }) 
                          <div className="fade-in" style={{ background: 'var(--bg-sunken)', padding: '0 0 10px 0', position: 'relative', borderLeft: '3px solid var(--sdc-blue)', marginLeft: 0 }}>
                             <div style={{ position: 'absolute', left: 45, top: 0, bottom: 0, width: 2, background: 'var(--border-strong)', opacity: 0.3 }} />
                             <div style={{
-                              display: 'grid', gridTemplateColumns: '40px 120px 1fr 50px 50px 85px 85px 85px',
+                              display: 'grid', gridTemplateColumns: '40px 120px 1fr 50px 50px 80px 85px 85px 85px',
                               padding: '10px 14px 8px 54px', borderBottom: '1px solid #334155',
                               background: '#334155', gap: 12, position: 'relative', zIndex: 10,
                               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
@@ -384,6 +399,7 @@ function PoTracker({ poActions, query, highlightPoIds = [], onClearHighlight }) 
                               <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>DESCRIPTION</div>
                               <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right', color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>QTY</div>
                               <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right', color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>RCVD</div>
+                              <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right', color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>COST</div>
                               <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>REQ DATE</div>
                               <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>EXP DATE</div>
                               <div className="eyebrow" style={{ fontSize: 9, textAlign: 'right', color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.05em' }}>SLIP</div>
@@ -392,13 +408,13 @@ function PoTracker({ poActions, query, highlightPoIds = [], onClearHighlight }) 
                              const isRcvd = p.received >= p.qty;
                              return (
                                <div key={pidx} style={{
-                                 display: 'grid', gridTemplateColumns: '40px 120px 1fr 50px 50px 85px 85px 85px',
+                                 display: 'grid', gridTemplateColumns: '40px 120px 1fr 50px 50px 80px 85px 85px 85px',
                                  padding: '6px 14px 6px 54px', gap: 12, alignItems: 'center',
                                  borderBottom: pidx === po.parts.length - 1 ? 'none' : '1px solid var(--border-soft)'
                                }}>
                                  <div>
-                                   {isRcvd ? 
-                                     <span style={{ color: 'var(--ready)', display: 'flex' }}><window.IconCheck size={12}/></span> : 
+                                   {isRcvd ?
+                                     <span style={{ color: 'var(--ready)', display: 'flex' }}><window.IconCheck size={12}/></span> :
                                      <span style={{ color: p.daysUntilDue < 0 ? 'var(--threat)' : 'var(--pending)', display: 'flex' }}><window.IconClock size={12}/></span>
                                    }
                                  </div>
@@ -406,6 +422,9 @@ function PoTracker({ poActions, query, highlightPoIds = [], onClearHighlight }) 
                                  <span style={{ fontSize: 11, color: 'var(--fg-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.partDesc}</span>
                                  <span className="mono" style={{ fontSize: 11, color: 'var(--fg-1)', textAlign: 'right' }}>{p.qty}</span>
                                  <span className="mono" style={{ fontSize: 11, color: isRcvd ? 'var(--ready-ink)' : 'var(--fg-3)', textAlign: 'right' }}>{p.received}</span>
+                                 <span className="mono" style={{ fontSize: 10, color: 'var(--fg-2)', textAlign: 'right' }}>
+                                   {p.price != null && p.price > 0 ? `$${Number(p.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                                 </span>
                                  <span className="mono" style={{ fontSize: 10, color: p.daysUntilDue < 0 && !isRcvd ? 'var(--threat)' : 'var(--fg-2)' }}>
                                    {p.dueDate ? new Date(p.dueDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '—'}
                                  </span>
@@ -514,6 +533,87 @@ function EmailsPanel({ emails, job }) {
           <EmailRow key={i} e={e} job={job} open={open === i} onToggle={() => setOpen(open === i ? null : i)}/>
         ))}
         {emails.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>No vendor emails to draft.</div>}
+      </div>
+    </div>
+  );
+}
+
+function OverduePartsView({ poActions }) {
+  const fmt = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+
+  const { arrivingSoon, dueToday, arrivedLate } = useMemo(() => {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const windowStart = new Date(todayStart); windowStart.setDate(windowStart.getDate() - 7);
+    const windowEnd   = new Date(todayStart); windowEnd.setDate(windowEnd.getDate() + 8);
+    const arrivingSoon = [], dueToday = [], arrivedLate = [];
+    [...(poActions?.critical || []), ...(poActions?.warning || []), ...(poActions?.onTrack || [])].forEach(entry => {
+      entry.po.parts.forEach(p => {
+        if (p.received >= p.qty) return;
+        if (!p.dueDate) return;
+        const d = new Date(p.dueDate);
+        if (d < windowStart || d >= windowEnd) return;
+        const row = { ...p, supplier: entry.supplier, poId: entry.po.poId };
+        if (d >= tomorrowStart) arrivingSoon.push(row);
+        else if (d >= todayStart) dueToday.push(row);
+        else arrivedLate.push(row);
+      });
+    });
+    arrivedLate.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+    arrivingSoon.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    return { arrivingSoon, dueToday, arrivedLate };
+  }, [poActions]);
+
+  const COLS = '115px 1fr 160px 90px 80px 80px';
+  const HDR = {
+    display: 'grid', gridTemplateColumns: COLS, gap: 10,
+    padding: '6px 16px', fontSize: 9, fontWeight: 700, color: 'var(--fg-3)',
+    letterSpacing: '0.07em', textTransform: 'uppercase',
+    background: 'var(--bg-3)', borderBottom: '1px solid var(--border-soft)',
+    position: 'sticky', top: 0, zIndex: 2,
+  };
+  const ROW = { display: 'grid', gridTemplateColumns: COLS, gap: 10, padding: '7px 16px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', fontSize: 12 };
+
+  const Section = ({ label, color, parts }) => {
+    if (parts.length === 0) return null;
+    return (
+      <>
+        <div style={{ padding: '7px 16px', background: `${color}0d`, borderTop: '1px solid var(--border-soft)', borderBottom: `1px solid ${color}25`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{label}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}30`, borderRadius: 10, padding: '1px 8px' }}>{parts.length}</span>
+        </div>
+        {parts.map((p, i) => (
+          <div key={i} className="row-hover" style={{ ...ROW, background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.012)' }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.partNumber}</span>
+            <span style={{ fontSize: 11, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.partDesc}</span>
+            <span style={{ fontSize: 10, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.supplier}</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--sdc-blue)', fontWeight: 600 }}>{p.poId}</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--fg-2)' }}>{fmt(p.requiredDate)}</span>
+            <span className="mono" style={{ fontSize: 10, color, fontWeight: 600 }}>{fmt(p.dueDate)}</span>
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  if (arrivedLate.length === 0 && dueToday.length === 0 && arrivingSoon.length === 0) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
+        No parts due within ±7 days.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={HDR}>
+        <span>Part #</span><span>Description</span><span>Supplier</span>
+        <span>PO #</span><span>Req Date</span><span>Exp Date</span>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <Section label="Arrived Late"   color="#dc2626" parts={arrivedLate}  />
+        <Section label="Expected Today" color="#2563eb" parts={dueToday}     />
+        <Section label="Arriving Soon"  color="#16a34a" parts={arrivingSoon} />
       </div>
     </div>
   );

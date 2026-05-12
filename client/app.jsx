@@ -169,6 +169,7 @@ function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fetchKey, setFetchKey] = useState(0);
   const [query, setQuery] = useState('');
   const [highlightPoIds, setHighlightPoIds] = useState([]);
 
@@ -290,7 +291,7 @@ function App() {
         setError(err.message);
         setLoading(false);
       });
-  }, [jobId]);
+  }, [jobId, fetchKey]);
 
   // ── No job selected yet — show landing screen ──
   if (!jobId) {
@@ -306,7 +307,7 @@ function App() {
           <div className="eyebrow" style={{ color: 'var(--threat)' }}>Could Not Load Job #{jobId}</div>
           <p style={{ color: 'var(--ink-3)', margin: '12px 0 24px', fontSize: 14 }}>{error}</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => { setError(null); setData(null); setLoading(true); /* trigger effect */ setJobId(String(jobId)); }}>
+            <button className="btn btn-primary" onClick={() => { try { localStorage.removeItem(`sdc_cache_${jobId}_${CACHE_VERSION}`); } catch(e) {} setError(null); setData(null); setFetchKey(k => k + 1); }}>
               Retry
             </button>
             <button className="btn" onClick={() => { setJobId(null); setError(null); setData(null); }}>

@@ -1,114 +1,199 @@
 // Build Readiness Tab — Premium SDC Design
 const { useState, useMemo, useEffect } = React;
 
-function RiskPartsPanel({ readiness, nopo }) {
-  const [collapsed, setCollapsed] = useState(false);
+function useColResize(initial) {
+  const [widths, setWidths] = useState(initial);
+  const drag = React.useRef(null);
+  const startDrag = (idx, e) => {
+    e.preventDefault();
+    drag.current = { idx, x: e.clientX, w: widths[idx] };
+    const onMove = ev => {
+      if (!drag.current) return;
+      const { idx, x, w } = drag.current;
+      setWidths(prev => { const n = [...prev]; n[idx] = Math.max(40, w + (ev.clientX - x)); return n; });
+    };
+    const onUp = () => {
+      drag.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+  const template = widths.map(w => `${w}px`).join(' ');
+  return { template, startDrag };
+}
+
+const ColHandle = ({ onMouseDown }) => (
+  <div
+    onMouseDown={onMouseDown}
+    style={{ position: 'absolute', right: 0, top: '15%', bottom: '15%', width: 3, cursor: 'col-resize', zIndex: 1, background: 'var(--border-strong)', opacity: 0.35, borderRadius: 2, transition: 'opacity 0.15s' }}
+    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+    onMouseLeave={e => e.currentTarget.style.opacity = '0.35'}
+  />
+);
+
+function RiskPartsPanel({ nopo, poActions }) {
+  const [slipCollapsed, setSlipCollapsed] = useState(false);
+  const [nopCollapsed,  setNopCollapsed]  = useState(false);
+  const slip = useColResize([110, 200, 68, 68, 72, 70]);
+  const nop  = useColResize([110, 200, 70, 40, 70]);
+
+  const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
 
   const slipping = useMemo(() => {
-    const seen = new Set();
+    const windowStart = new Date(todayStart); windowStart.setDate(windowStart.getDate() - 7);
+    const windowEnd   = new Date(todayStart); windowEnd.setDate(windowEnd.getDate() + 8);
     const parts = [];
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    readiness.forEach(spec => {
-      spec.assemblies.forEach(a => {
-        (a.node?.parts || []).forEach(p => {
-          if (seen.has(p.id)) return;
-          const po = p.pos?.[0];
-          const dueDate = po?.dueDate ? new Date(po.dueDate) : null;
-          if (dueDate && p.requiredDate && dueDate > new Date(p.requiredDate) && dueDate <= today) {
-            seen.add(p.id);
-            const slipDays = Math.round((dueDate - new Date(p.requiredDate)) / 86400000);
-            parts.push({ ...p, slipDays, assemblyDesc: a.desc || a.code, po });
-          }
-        });
+    [...(poActions?.critical || []), ...(poActions?.warning || []), ...(poActions?.onTrack || [])].forEach(entry => {
+      entry.po.parts.forEach(p => {
+        if (p.received >= p.qty) return;
+        const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+        if (!dueDate || dueDate < windowStart || dueDate >= windowEnd) return;
+        parts.push({ ...p, supplier: entry.supplier, poId: entry.po.poId, poDate: entry.po.poDate });
       });
     });
-    return parts.sort((a, b) => b.slipDays - a.slipDays);
-  }, [readiness]);
+    return parts.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  }, [poActions, todayStart]);
+
+  const slipStats = useMemo(() => {
+    let totalLate = 0, lateCount = 0, oldestReq = null;
+    slipping.forEach(p => {
+      const due = new Date(p.dueDate);
+      if (due < todayStart) { totalLate += Math.round((todayStart - due) / 86400000); lateCount++; }
+      const req = p.requiredDate ? new Date(p.requiredDate) : null;
+      if (req && (!oldestReq || req < oldestReq)) oldestReq = req;
+    });
+    return {
+      avgLate:   lateCount > 0 ? `+${Math.round(totalLate / lateCount)}d` : '—',
+      hasLate:   lateCount > 0,
+      oldestReq: oldestReq ? oldestReq.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—',
+    };
+  }, [slipping, todayStart]);
+
+  const nopStats = useMemo(() => {
+    const weekEnd = new Date(todayStart); weekEnd.setDate(weekEnd.getDate() + 7);
+    let thisWeek = 0, oldestReq = null;
+    nopo.forEach(p => {
+      const req = p.requiredDate ? new Date(p.requiredDate) : null;
+      if (!req) return;
+      if (req <= weekEnd) thisWeek++;
+      if (!oldestReq || req < oldestReq) oldestReq = req;
+    });
+    return {
+      thisWeek,
+      oldestReq: oldestReq ? oldestReq.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—',
+    };
+  }, [nopo, todayStart]);
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
 
-  const totalSlipDays = slipping.reduce((s, p) => s + p.slipDays, 0);
+  const CARD   = { background: 'var(--bg-raised)', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden' };
+  const HDR_BASE = { display: 'grid', gap: 10, padding: '8px 14px 7px', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--ink-4)', textTransform: 'uppercase', background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border-subtle)' };
+  const ROW_BASE = { display: 'grid', gap: 10, padding: '7px 14px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', fontSize: 12 };
+  const CELL_H   = { position: 'relative', overflow: 'hidden' };
 
-  const PanelHeader = ({ color, icon, label, count, sub }) => (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-      <div style={{ position: 'absolute', inset: 0, background: color, opacity: 0.05, pointerEvents: 'none' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
-          {icon} {label}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 700, color, background: `${color}15`, border: `1px solid ${color}30`, borderRadius: 10, padding: '1px 8px' }}>{count}</span>
-      </div>
-      <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>{sub}</span>
-    </div>
+  const Stat = ({ label, value, valueColor }) => (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--ink-4)', textTransform: 'uppercase' }}>{label}</span>
+      <span className="mono" style={{ fontSize: 15, fontWeight: 700, color: valueColor || 'var(--ink)', letterSpacing: '-0.01em' }}>{value}</span>
+    </span>
   );
 
-  const ROW = { display: 'grid', gridTemplateColumns: '105px 1fr 90px 68px 68px 52px', gap: 10, padding: '6px 14px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', fontSize: 12 };
-  const HDR = { ...ROW, padding: '5px 14px', fontSize: 9, fontWeight: 700, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border-subtle)' };
+  const HideBtn = ({ collapsed, onToggle }) => (
+    <button onClick={onToggle} style={{ height: 26, padding: '0 10px', border: '1px solid var(--border)', background: 'var(--bg-raised)', borderRadius: 6, color: 'var(--ink-4)', fontSize: 11, fontWeight: 500, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      {collapsed ? 'Show' : 'Hide'} <span style={{ fontSize: 9 }}>{collapsed ? '↓' : '↑'}</span>
+    </button>
+  );
 
   return (
-    <div style={{ margin: '12px 0', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-raised)' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '12px 0' }}>
 
-      {/* Strip header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ink-3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Procurement Risk</span>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>
-            <span style={{ color: '#c2410c', fontWeight: 700 }}>{slipping.length}</span> slipping delivery · <span style={{ color: 'var(--threat-ink)', fontWeight: 700 }}>{nopo.length}</span> no PO
+      {/* ── Delivery Slip Card ── */}
+      <div style={CARD}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', alignItems: 'center', gap: 20, padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#b8861b' }}>
+            <span style={{ width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#fbf1d6', color: '#b8861b', borderRadius: 4, fontWeight: 800, fontSize: 12 }}>!</span>
+            Delivery Slip
           </span>
+          <span />
+          <Stat label="Parts"    value={slipping.length} valueColor="#b8861b" />
+          <Stat label="Avg Late" value={slipStats.avgLate} valueColor={slipStats.hasLate ? '#c43e1c' : 'var(--ink-3)'} />
+          <Stat label="Oldest Req" value={slipStats.oldestReq} />
+          <HideBtn collapsed={slipCollapsed} onToggle={() => setSlipCollapsed(c => !c)} />
         </div>
-        <button onClick={() => setCollapsed(c => !c)} style={{ fontSize: 11, color: 'var(--ink-4)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 10px', cursor: 'pointer' }}>
-          {collapsed ? 'Show ↓' : 'Hide ↑'}
-        </button>
+        {!slipCollapsed && (
+          <>
+            <div style={{ ...HDR_BASE, gridTemplateColumns: slip.template }}>
+              {['Part #','Description','Req Date','Exp Date','Order Date','Cost'].map((lbl, i) => (
+                <span key={i} style={{ ...CELL_H, textAlign: i === 5 ? 'right' : 'left' }}>{lbl}<ColHandle onMouseDown={e => slip.startDrag(i, e)} /></span>
+              ))}
+            </div>
+            <div style={{ maxHeight: 150, overflowY: 'auto' }}>
+              {slipping.length === 0
+                ? <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>No parts due within ±7 days</div>
+                : slipping.map((p, i) => (
+                  <div key={i} className="row-hover" style={{ ...ROW_BASE, gridTemplateColumns: slip.template }}>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.partNumber}</span>
+                    <span style={{ fontSize: 12, letterSpacing: '0.02em', textTransform: 'uppercase', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.partDesc}</span>
+                    <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(p.requiredDate)}</span>
+                    <span className="mono" style={{ fontWeight: 600, color: new Date(p.dueDate) < todayStart ? '#c43e1c' : 'var(--ink-2)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(p.dueDate)}</span>
+                    <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11, whiteSpace: 'nowrap' }}>{p.poDate ? fmtDate(p.poDate) : '—'}</span>
+                    <span className="mono" style={{ textAlign: 'right', fontSize: 11, color: p.price > 0 ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                      {p.price > 0 ? `$${Number(p.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </span>
+                  </div>
+                ))
+              }
+            </div>
+          </>
+        )}
       </div>
 
-      {!collapsed && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
-
-          {/* ── Slipping Deliveries ── */}
-          <div style={{ borderRight: '1px solid var(--border-subtle)' }}>
-            <PanelHeader color="#c2410c" icon="⚠" label="Delivery Slip" count={slipping.length} sub={slipping.length > 0 ? `avg +${Math.round(totalSlipDays / slipping.length)}d late` : 'All on time'} />
-            <div style={HDR}>
-              <span>Part #</span><span>Description</span><span>Supplier</span><span>Req Date</span><span>Exp Date</span><span style={{ textAlign: 'right' }}>+Days</span>
-            </div>
-            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-              {slipping.length === 0 ? (
-                <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>All deliveries on time</div>
-              ) : slipping.map((p, i) => (
-                <div key={i} className="row-hover" style={{ ...ROW, background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pn}</span>
-                  <span style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>
-                  <span style={{ color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{p.po?.supplier || '—'}</span>
-                  <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
-                  <span className="mono" style={{ fontWeight: 700, color: '#c2410c', fontSize: 11 }}>{fmtDate(p.po?.dueDate)}</span>
-                  <span className="mono" style={{ textAlign: 'right', fontWeight: 700, color: '#c2410c', fontSize: 12 }}>+{p.slipDays}d</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── No PO Parts ── */}
-          <div>
-            <PanelHeader color="var(--threat-ink)" icon="✕" label="No Purchase Order" count={nopo.length} sub={nopo.length > 0 ? 'Not yet procured' : 'All parts have POs'} />
-            <div style={{ ...HDR, gridTemplateColumns: '105px 1fr 90px 70px 58px' }}>
-              <span>Part #</span><span>Description</span><span>Assembly</span><span>Req Date</span><span style={{ textAlign: 'right' }}>Qty</span>
-            </div>
-            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-              {nopo.length === 0 ? (
-                <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>All parts have purchase orders</div>
-              ) : nopo.map((p, i) => (
-                <div key={i} className="row-hover" style={{ ...ROW, gridTemplateColumns: '105px 1fr 90px 70px 58px', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pn || p.id}</span>
-                  <span style={{ color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>
-                  <span style={{ color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>{p.parentPN || '—'}</span>
-                  <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11 }}>{fmtDate(p.requiredDate)}</span>
-                  <span className="mono" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--ink-2)', fontSize: 12 }}>{p.qty}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
+      {/* ── No PO Card ── */}
+      <div style={CARD}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', alignItems: 'center', gap: 20, padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c43e1c' }}>
+            <span style={{ width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#fbeae3', color: '#c43e1c', borderRadius: 4, fontWeight: 800, fontSize: 13 }}>×</span>
+            No Purchase Order
+          </span>
+          <span />
+          <Stat label="Parts"     value={nopo.length}       valueColor="#c43e1c" />
+          <Stat label="This Week" value={nopStats.thisWeek} />
+          <Stat label="Oldest Req" value={nopStats.oldestReq} />
+          <HideBtn collapsed={nopCollapsed} onToggle={() => setNopCollapsed(c => !c)} />
         </div>
-      )}
+        {!nopCollapsed && (
+          <>
+            <div style={{ ...HDR_BASE, gridTemplateColumns: nop.template }}>
+              {['Part #','Description','Req Date','Qty','Cost'].map((lbl, i) => (
+                <span key={i} style={{ ...CELL_H, textAlign: i >= 3 ? 'right' : 'left' }}>{lbl}<ColHandle onMouseDown={e => nop.startDrag(i, e)} /></span>
+              ))}
+            </div>
+            <div style={{ maxHeight: 150, overflowY: 'auto' }}>
+              {nopo.length === 0
+                ? <div style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 12 }}>All parts have purchase orders</div>
+                : nopo.map((p, i) => (
+                  <div key={i} className="row-hover" style={{ ...ROW_BASE, gridTemplateColumns: nop.template }}>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: 'var(--sdc-blue)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pn || p.id}</span>
+                    <span style={{ fontSize: 12, letterSpacing: '0.02em', textTransform: 'uppercase', color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>
+                    <span className="mono" style={{ color: 'var(--ink-3)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(p.requiredDate)}</span>
+                    <span className="mono" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--ink-2)', fontSize: 12 }}>{p.qty}</span>
+                    <span className="mono" style={{ textAlign: 'right', fontSize: 11, color: p.unitPrice > 0 ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                      {p.unitPrice > 0 ? `$${Number(p.unitPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </span>
+                  </div>
+                ))
+              }
+            </div>
+          </>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -184,7 +269,7 @@ function ReadinessTab({ data, query, setQuery, statusFilter, setStatusFilter, jo
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <window.TimelineRibbon job={job} poActions={data.poActions} smartsheet={data.buildDates} onDrillDown={onDrillDown} />
 
-      <RiskPartsPanel readiness={data.readiness} nopo={data.nopo} />
+      <RiskPartsPanel readiness={data.readiness} nopo={data.nopo} poActions={data.poActions} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

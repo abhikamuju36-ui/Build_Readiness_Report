@@ -229,8 +229,6 @@ function buildPoActionList(poRows) {
   // Group by supplier
   const bySupplier = {};
   poRows.forEach(row => {
-
-
     const key = row.Supplier || 'Unknown';
     if (!bySupplier[key]) {
       bySupplier[key] = {
