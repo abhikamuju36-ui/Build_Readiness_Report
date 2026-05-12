@@ -1,6 +1,42 @@
 // PO Action List — Parts view + Vendor lens
 const { useState, useMemo, useEffect } = React;
 
+function useColResize(initial) {
+  const [widths, setWidths] = useState(initial);
+  const drag = React.useRef(null);
+  const startDrag = (idx, e) => {
+    e.preventDefault();
+    drag.current = { idx, x: e.clientX, w: widths[idx] };
+    const onMove = ev => {
+      if (!drag.current) return;
+      const { idx, x, w } = drag.current;
+      setWidths(prev => { const n = [...prev]; n[idx] = Math.max(40, w + (ev.clientX - x)); return n; });
+    };
+    const onUp = () => {
+      drag.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+  const template = widths.map(w => `${w}px`).join(' ');
+  return { template, startDrag };
+}
+
+const ColHandleDark = ({ onMouseDown }) => (
+  <div
+    onMouseDown={onMouseDown}
+    style={{ position: 'absolute', right: 0, top: '15%', bottom: '15%', width: 3, cursor: 'col-resize', zIndex: 1, background: 'rgba(255,255,255,0.3)', opacity: 0.5, borderRadius: 2, transition: 'opacity 0.15s' }}
+    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+    onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}
+  />
+);
+
 function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
   const [view, setView] = useState('pos');
   const [query, setQuery] = useState('');
@@ -103,6 +139,10 @@ function PoTab({ data, highlightPoIds = [], onClearHighlight }) {
 
 function PartsFlatView({ parts, query, job }) {
   const [copiedPn, setCopiedPn] = React.useState(null);
+  const col = useColResize([120, 220, 155, 45, 55, 130, 75, 75, 75, 82]);
+
+  const HDRS = ['Part Number', 'Description', 'Assembly / Source', 'Qty', 'Unit $', 'Manufacturer', 'PO #', 'Order Date', 'Exp Date', 'Status'];
+  const RIGHT_COLS = new Set([3, 4, 9]);
 
   const copyPn = (pn) => {
     navigator.clipboard?.writeText(pn).catch(() => {});
@@ -110,12 +150,14 @@ function PartsFlatView({ parts, query, job }) {
     setTimeout(() => setCopiedPn(null), 1500);
   };
 
+  const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+
   const filtered = parts.filter(p => {
     if (!query) return true;
     const q = query.toLowerCase();
     const poNum = p.pos?.[0]?.poId || '';
-    return String(p.pn || p.id).toLowerCase().includes(q) || 
-           (p.desc || '').toLowerCase().includes(q) || 
+    return String(p.pn || p.id).toLowerCase().includes(q) ||
+           (p.desc || '').toLowerCase().includes(q) ||
            String(poNum).toLowerCase().includes(q) ||
            (p.parentPN || '').toLowerCase().includes(q) ||
            (p.parentDesc || '').toLowerCase().includes(q);
@@ -123,34 +165,29 @@ function PartsFlatView({ parts, query, job }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Header */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '120px 1fr 160px 45px 50px 140px 80px 80px',
-        padding: '6px 10px',
-        gap: 8,
-        background: 'var(--ink)',
-        color: '#fff',
+        display: 'grid', gridTemplateColumns: col.template,
+        padding: '6px 10px', gap: 8,
+        background: 'var(--ink)', color: '#fff',
         borderBottom: '1px solid var(--border-soft)',
-        position: 'sticky', top: 0, zIndex: 10
+        position: 'sticky', top: 0, zIndex: 10,
       }}>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)' }}>Part Number</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)' }}>Description</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)' }}>Assembly / Source</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>Qty</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>Unit $</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)' }}>Manufacturer</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)' }}>PO #</div>
-        <div className="eyebrow" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>Status</div>
+        {HDRS.map((lbl, i) => (
+          <div key={i} className="eyebrow" style={{ position: 'relative', overflow: 'hidden', fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: RIGHT_COLS.has(i) ? 'right' : 'left' }}>
+            {lbl}
+            <ColHandleDark onMouseDown={e => col.startDrag(i, e)} />
+          </div>
+        ))}
       </div>
-      
+
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {filtered.map((p, i) => {
           const today = new Date();
-          // Use part-specific date, or fallback to job build start
           const reqDateStr = p.requiredDate || (job && job.buildStart);
           const req = reqDateStr ? new Date(reqDateStr) : null;
           const diff = req ? Math.ceil((req - today) / 86400000) : null;
-          
+
           let urgency = 'long';
           if (diff !== null) {
             if (diff < 0) urgency = 'overdue';
@@ -158,27 +195,26 @@ function PartsFlatView({ parts, query, job }) {
           }
 
           const u = {
-            overdue: { cls: 'threat', label: 'OVERDUE', sub: diff !== null ? `${Math.abs(diff)}d Late` : 'Past Due' },
-            soon:    { cls: 'pending', label: 'DUE SOON', sub: `In ${diff}d` },
-            long:    { cls: 'blue', label: 'FUTURE', sub: diff !== null ? (p.requiredDate ? `In ${diff}d` : `Est In ${diff}d`) : 'TBD' },
+            overdue: { cls: 'threat',   label: 'OVERDUE',  sub: diff !== null ? `${Math.abs(diff)}d Late` : 'Past Due' },
+            soon:    { cls: 'pending',  label: 'DUE SOON', sub: `In ${diff}d` },
+            long:    { cls: 'blue',     label: 'FUTURE',   sub: diff !== null ? (p.requiredDate ? `In ${diff}d` : `Est In ${diff}d`) : 'TBD' },
           }[urgency];
 
           const unitPrice = p.unitPrice || 0;
+          const po0 = p.pos?.[0];
+
           return (
             <div key={i} className="row-hover" style={{
-              display: 'grid',
-              gridTemplateColumns: '120px 1fr 160px 45px 50px 140px 80px 80px',
+              display: 'grid', gridTemplateColumns: col.template,
               padding: '2px 10px', gap: 8, alignItems: 'center',
               borderBottom: '1px solid var(--border-subtle)',
-              background: urgency === 'overdue' && p.status !== 'received' ? 'var(--threat-soft)' : 'transparent'
+              background: urgency === 'overdue' && p.status !== 'received' ? 'var(--threat-soft)' : 'transparent',
             }}>
-              <span
-                className="mono"
-                title="Click to copy"
-                onClick={() => copyPn(p.pn || p.id)}
-                style={{ fontSize: 10, fontWeight: 800, color: copiedPn === (p.pn || p.id) ? 'var(--ready-ink)' : 'var(--sdc-blue)', cursor: 'pointer', transition: 'color 0.2s' }}
-              >{copiedPn === (p.pn || p.id) ? '✓ Copied' : (p.pn || p.id)}</span>
-              <span style={{ fontSize: 10, color: 'var(--fg-1)', fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
+              <span className="mono" title="Click to copy" onClick={() => copyPn(p.pn || p.id)}
+                style={{ fontSize: 10, fontWeight: 800, color: copiedPn === (p.pn || p.id) ? 'var(--ready-ink)' : 'var(--sdc-blue)', cursor: 'pointer', transition: 'color 0.2s', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {copiedPn === (p.pn || p.id) ? '✓ Copied' : (p.pn || p.id)}
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--fg-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.desc}</span>
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--fg-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>{p.parentPN || 'LOOSE'}</span>
                 <span style={{ fontSize: 9, color: 'var(--fg-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.1 }}>{p.parentDesc || p.assemblyDesc || 'Loose Parts'}</span>
@@ -187,19 +223,25 @@ function PartsFlatView({ parts, query, job }) {
               <span className="mono tnum" style={{ fontSize: 10, textAlign: 'right', color: unitPrice > 0 ? 'var(--fg-1)' : 'var(--fg-4)' }}>
                 {unitPrice > 0 ? `$${unitPrice >= 1000 ? (unitPrice / 1000).toFixed(1) + 'K' : unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
               </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                 <window.VendorAvatar vendor={p.manufacturer || 'SDC'} size={14} />
-                 <span style={{ fontSize: 10, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.manufacturer === 'SDC' ? 'In-house (SDC)' : (p.manufacturer || 'SDC')}
-                 </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                <window.VendorAvatar vendor={p.manufacturer || 'SDC'} size={14} />
+                <span style={{ fontSize: 10, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.manufacturer === 'SDC' ? 'In-house (SDC)' : (p.manufacturer || 'SDC')}
+                </span>
               </div>
-              <span className="mono" style={{ fontSize: 10, color: p.pos?.length ? 'var(--sdc-blue)' : 'var(--fg-4)', fontWeight: p.pos?.length ? 600 : 400 }}>
-                {p.pos?.[0]?.poId || 'NO PO'}
+              <span className="mono" style={{ fontSize: 10, color: po0?.poId ? 'var(--sdc-blue)' : 'var(--fg-4)', fontWeight: po0?.poId ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {po0?.poId || 'NO PO'}
+              </span>
+              <span className="mono" style={{ fontSize: 10, color: po0?.poDate ? 'var(--fg-2)' : 'var(--fg-4)', whiteSpace: 'nowrap' }}>
+                {fmtDate(po0?.poDate)}
+              </span>
+              <span className="mono" style={{ fontSize: 10, color: po0?.dueDate ? (new Date(po0.dueDate) < today && p.status !== 'received' ? 'var(--threat)' : 'var(--fg-2)') : 'var(--fg-4)', fontWeight: po0?.dueDate ? 600 : 400, whiteSpace: 'nowrap' }}>
+                {fmtDate(po0?.dueDate)}
               </span>
               <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
                 <span className={`badge badge-${p.status === 'received' ? 'ready' : u.cls}`} style={{ fontSize: 7, padding: '1px 3px', lineHeight: 1 }}>{p.status === 'received' ? 'RECEIVED' : u.label}</span>
                 <span style={{ fontSize: 8, color: 'var(--fg-3)', fontWeight: 600, lineHeight: 1 }}>
-                   {p.status === 'received' ? (p.receivedDate ? new Date(p.receivedDate).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : 'Delivered') : u.sub}
+                  {p.status === 'received' ? (p.receivedDate ? new Date(p.receivedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Delivered') : u.sub}
                 </span>
               </div>
             </div>
