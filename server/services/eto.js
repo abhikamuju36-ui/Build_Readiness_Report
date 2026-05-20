@@ -76,6 +76,7 @@ async function getBomRows(projectId, specId) {
         eps.ItemQty,
         eps.SpecID,
         eps.RequiredDate,
+        eps.ItemHold,
         ISNULL((
           SELECT SUM(pod.PurchaseQty)
           FROM tblPurchaseOrderDetails pod
