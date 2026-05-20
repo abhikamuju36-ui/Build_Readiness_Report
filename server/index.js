@@ -5,6 +5,7 @@ const path = require('path');
 const bomRoutes = require('./routes/bom');
 const readinessRoutes = require('./routes/readiness');
 const emailRoutes = require('./routes/emails');
+const checkRoutes = require('./routes/check');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,7 @@ app.use(express.static(path.join(__dirname, '..', 'client')));
 app.use(express.json());
 
 // API routes
+app.use('/api/check', checkRoutes);
 app.use('/api/bom', bomRoutes);
 app.use('/api/readiness', readinessRoutes);
 app.use('/api/emails', emailRoutes);
